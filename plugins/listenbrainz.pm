@@ -1,24 +1,24 @@
-# Copyright (C) 2005-2009 Quentin Sculo <squentin@free.fr>
+# Copyright (C) 2024 Carl di Ortus <reklamukibiras@gmail.com>
 #
 # This file is part of Gmusicbrowser.
 # Gmusicbrowser is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 3, as
 # published by the Free Software Foundation
 
-=for gmbplugin AUDIOSCROBBLER
-name	last.fm
-title	last.fm plugin
-desc	Submit played songs to last.fm
+=for gmbplugin LISTENBRAINZ
+name	listenbrainz
+title	listenbrainz.org plugin
+desc	Submit played songs to listenbrainz
 =cut
 
 
-package GMB::Plugin::AUDIOSCROBBLER;
+package GMB::Plugin::LISTENBRAINZ;
 use strict;
 use warnings;
 use constant
 {	CLIENTID => 'gmb', VERSION => '0.1',
-	OPT => 'PLUGIN_AUDIOSCROBBLER_',#used to identify the plugin's options
-	SAVEFILE => 'audioscrobbler.queue', #file used to save unsent data
+	OPT => 'PLUGIN_LISTENBRAINZ_',#used to identify the plugin's options
+	SAVEFILE => 'listenbrainz.queue', #file used to save unsent data
 };
 use Digest::MD5 'md5_hex';
 require $::HTTP_module;
@@ -58,17 +58,17 @@ sub prefbox
 	my $sg2= Gtk3::SizeGroup->new('horizontal');
 	my $entry1=::NewPrefEntry(OPT.'USER',_"username :", cb => \&userpass_changed, sizeg1 => $sg1,sizeg2=>$sg2);
 	my $entry2=::NewPrefEntry(OPT.'PASS',_"password :", cb => \&userpass_changed, sizeg1 => $sg1,sizeg2=>$sg2, hide => 1);
-	my $label2= Gtk3::Button->new(_"(see http://www.last.fm)");
+	my $label2= Gtk3::Button->new(_"(see https://listenbrainz.org)");
 	$label2->set_relief('none');
 	$label2->signal_connect(clicked => sub
-		{	my $url='http://www.last.fm';
+		{	my $url='https://listenbrainz.org';
 			my $user=$::Options{OPT.'USER'};
 			$url.="/user/$user/" if defined $user && $user ne '';
 			::openurl($url);
 		});
 	my $ignore= Gtk3::CheckButton->new(_"Don't submit current song");
-	$ignore->signal_connect(toggled=>sub { return if $_[0]->{busy}; $ignore_current_song= $_[0]->get_active ? $::SongID : undef; ::HasChanged('Lastfm_ignore_current'); });
-	::Watch($ignore,Lastfm_ignore_current => sub { $_[0]->{busy}=1; $_[0]->set_active(defined $ignore_current_song); delete $_[0]->{busy}; } );
+	$ignore->signal_connect(toggled=>sub { return if $_[0]->{busy}; $ignore_current_song= $_[0]->get_active ? $::SongID : undef; ::HasChanged('Listenbrainz_ignore_current'); });
+	::Watch($ignore,Listenbrainz_ignore_current => sub { $_[0]->{busy}=1; $_[0]->set_active(defined $ignore_current_song); delete $_[0]->{busy}; } );
 	my $queue= Gtk3::Label->new;
 	my $sendnow= Gtk3::Button->new(_"Send now");
 	$sendnow->signal_connect(clicked=> \&SendNow);
@@ -80,7 +80,7 @@ sub prefbox
 	$qbox->show_all;
 	update_queue_label($qbox);
 	$qbox->set_no_show_all(1);
-	::Watch($qbox,Lastfm_state_change=>\&update_queue_label);
+	::Watch($qbox,Listenbrainz_state_change=>\&update_queue_label);
 	return $vbox;
 }
 sub update_queue_label
@@ -101,7 +101,7 @@ sub userpass_changed
 sub SongChanged
 {	if (defined $ignore_current_song)
 	{	return if defined $::SongID && $::SongID == $ignore_current_song;
-		$ignore_current_song=undef; ::HasChanged('Lastfm_ignore_current');
+		$ignore_current_song=undef; ::HasChanged('Listenbrainz_ignore_current');
 	}
 	$NowPlaying=undef;
 	my ($title,$artist,$album,$track,$length)= Songs::Get($::SongID,qw/title artist album track length/);
@@ -122,7 +122,7 @@ sub Played
 		::IdleDo("9_".__PACKAGE__,10000,\&Save) if @ToSubmit>$unsent_saved;
 		push @ToSubmit,[ $artist,$title,$album,'',$length,$start_time,$track,'P' ];
 		Sleep();
-		::QHasChanged('Lastfm_state_change');
+		::QHasChanged('Listenbrainz_state_change');
 	}
 }
 
@@ -133,7 +133,7 @@ sub Handshake
 	my $pass=$::Options{OPT.'PASS'};
 	my $time=time;
 	my $auth=md5_hex(md5_hex($pass).$time);
-	Send(\&response_cb,'http://post.audioscrobbler.com/?hs=true&p=1.2&c='.CLIENTID.'&v='.VERSION."&u=$user&t=$time&a=$auth");
+	Send(\&response_cb,'http://proxy.listenbrainz.org/?hs=true&p=1.2&c='.CLIENTID.'&v='.VERSION."&u=$user&t=$time&a=$auth");
 }
 
 sub response_cb
@@ -235,7 +235,7 @@ sub SendNow
 sub Sleep
 {	#warn "Sleep\n";
 	return unless $self->{on};
-	::QHasChanged('Lastfm_state_change');
+	::QHasChanged('Listenbrainz_state_change');
 	return if $Stop || $waiting || $timeout;
 	$timeout=Glib::Timeout->add(1000*$interval,\&Awake) if @ToSubmit || $NowPlaying;
 	#warn "Sleeping $interval seconds\n" if $timeout;
@@ -258,7 +258,7 @@ sub Send
 		Sleep();
 	};
 	$waiting=Simple_http::get_with_cb(cb => $cb,url => $url,post => $post);
-	::QHasChanged('Lastfm_state_change');
+	::QHasChanged('Listenbrainz_state_change');
 }
 
 sub Log
@@ -285,7 +285,7 @@ sub Save	#save unsent data to a file
 	{ unlink $::HomeDir.SAVEFILE; return }
 	my $fh;
 	unless (open $fh,'>:utf8',$::HomeDir.SAVEFILE)
-	 { warn "Error creating '$::HomeDir".SAVEFILE."' : $!\nUnsent last.fm data will be lost.\n"; return; }
+	 { warn "Error creating '$::HomeDir".SAVEFILE."' : $!\nUnsent listenbrainz.org data will be lost.\n"; return; }
 	print $fh join("\x1D",@$_)."\n" for @ToSubmit;
 	close $fh;
 }
