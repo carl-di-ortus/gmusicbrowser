@@ -18,7 +18,6 @@ use warnings;
 use constant
 {	CLIENTID => 'gmb', VERSION => '0.1',
 	OPT => 'PLUGIN_LISTENBRAINZ_',#used to identify the plugin's options
-	SAVEFILE => 'listenbrainz.queue', #file used to save unsent data
 };
 use Digest::MD5 'md5_hex';
 require $::HTTP_module;
@@ -26,38 +25,33 @@ require $::HTTP_module;
 our $ignore_current_song;
 
 my $self=bless {},__PACKAGE__;
-my @ToSubmit; my $NowPlaying; my $NowPlayingID; my $unsent_saved=0;
-my $interval=5; my ($timeout,$waiting);
-my ($HandshakeOK,$submiturl,$nowplayingurl,$sessionid);
-my ($Serrors,$Stop);
+my @ToSubmit; my @NowPlaying; my $NowPlayingID;
+my $interval=10; my ($timeout,$waiting);
+my ($Stop);
 my $Log= Gtk3::ListStore->new('Glib::String');
-Load();
 
 sub Start
 {	::Watch($self,PlayingSong=> \&SongChanged);
 	::Watch($self,Played => \&Played);
-	::Watch($self,Save   => \&Save);
 	$self->{on}=1;
 	Sleep();
 	SongChanged() if $::TogPlay;
-	$Serrors=$Stop=undef;
+	$Stop=undef;
 }
 sub Stop
 {	$waiting->abort if $waiting;
 	Glib::Source->remove($timeout) if $timeout;
 	$timeout=$waiting=undef;
-	::UnWatch($self,$_) for qw/PlayingSong Played Save/;
+	::UnWatch($self,$_) for qw/PlayingSong Played/;
 	$self->{on}=undef;
-	$interval=5;
-	#@ToSubmit=();
+	$interval=10;
 }
 
 sub prefbox
 {	my $vbox= Gtk3::VBox->new(::FALSE, 2);
 	my $sg1= Gtk3::SizeGroup->new('horizontal');
 	my $sg2= Gtk3::SizeGroup->new('horizontal');
-	my $entry1=::NewPrefEntry(OPT.'USER',_"username :", cb => \&userpass_changed, sizeg1 => $sg1,sizeg2=>$sg2);
-	my $entry2=::NewPrefEntry(OPT.'PASS',_"password :", cb => \&userpass_changed, sizeg1 => $sg1,sizeg2=>$sg2, hide => 1);
+	my $entry2=::NewPrefEntry(OPT.'TOKEN',_"Token :", cb => \&Stop, sizeg1 => $sg1,sizeg2=>$sg2, hide => 1);
 	my $label2= Gtk3::Button->new(_"(see https://listenbrainz.org)");
 	$label2->set_relief('none');
 	$label2->signal_connect(clicked => sub
@@ -73,7 +67,7 @@ sub prefbox
 	my $sendnow= Gtk3::Button->new(_"Send now");
 	$sendnow->signal_connect(clicked=> \&SendNow);
 	my $qbox= ::Hpack($queue,$sendnow);
-	$vbox->pack_start($_,::FALSE,::FALSE,0) for $label2,$entry1,$entry2,$ignore,$qbox;
+	$vbox->pack_start($_,::FALSE,::FALSE,0) for $label2,$entry2,$ignore,$qbox;
 	$vbox->add( ::LogView($Log) );
 	$qbox->{label}=$queue;
 	$qbox->{button}=$sendnow;
@@ -86,16 +80,12 @@ sub prefbox
 sub update_queue_label
 {	my $qbox=shift;
 	my $label= $qbox->{label};
-	if (@ToSubmit && (@ToSubmit>1 || (!$waiting && (!$timeout || $interval>10))))
-	{	$label->set_text(::__n("%d song waiting to be sent","%d songs waiting to be sent", scalar @ToSubmit ));
+	if (@ToSubmit && (!$waiting && (!$timeout || $interval>10)))
+	{	$label->set_text(::__n("song waiting to be sent"));
 		$label->get_parent->show;
 		$qbox->{button}->set_sensitive(!$waiting);
 	}
 	else { $label->get_parent->hide }
-}
-sub userpass_changed
-{	$HandshakeOK=$Serrors=undef;
-	$Stop=undef if $Stop && $Stop eq 'BadAuth';
 }
 
 sub SongChanged
@@ -103,11 +93,14 @@ sub SongChanged
 	{	return if defined $::SongID && $::SongID == $ignore_current_song;
 		$ignore_current_song=undef; ::HasChanged('Listenbrainz_ignore_current');
 	}
-	$NowPlaying=undef;
-	my ($title,$artist,$album,$track,$length)= Songs::Get($::SongID,qw/title artist album track length/);
+	@NowPlaying=undef;
+	my ($title,$artist,$album)= Songs::Get($::SongID,qw/title artist album/);
 	return if $title eq '' || $artist eq '';
-	$NowPlaying= [ $artist, $title, $album, $length, $track, '' ];
+	warn "set NowPlaying";
+	@NowPlaying= ( $artist, $title, $album );
 	$NowPlayingID=$::SongID;
+	$interval=10;
+	$timeout=undef;
 	Sleep();
 }
 
@@ -117,147 +110,110 @@ sub Played
 	return unless $seconds>10;
 	my $length= Songs::Get($ID,'length');
 	if ($length>=30 && ($seconds >= 240 || $coverage >= .5) )
-	{	my ($title,$artist,$album,$track)= Songs::Get($ID,qw/title artist album track/);
+	{	my ($title,$artist,$album)= Songs::Get($ID,qw/title artist album/);
 		return if $title eq '' || $artist eq '';
-		::IdleDo("9_".__PACKAGE__,10000,\&Save) if @ToSubmit>$unsent_saved;
-		push @ToSubmit,[ $artist,$title,$album,'',$length,$start_time,$track,'P' ];
+		warn "set ToSumbit";
+		@ToSubmit= ( $artist, $title, $album );
+		$interval=10;
+		$timeout=undef;
 		Sleep();
 		::QHasChanged('Listenbrainz_state_change');
 	}
 }
 
-sub Handshake
-{	$HandshakeOK=0;
-	my $user=$::Options{OPT.'USER'};
-	return 0 unless defined $user && $user ne '';
-	my $pass=$::Options{OPT.'PASS'};
-	my $time=time;
-	my $auth=md5_hex(md5_hex($pass).$time);
-	Send(\&response_cb,'http://proxy.listenbrainz.org/?hs=true&p=1.2&c='.CLIENTID.'&v='.VERSION."&u=$user&t=$time&a=$auth");
-}
-
-sub response_cb
-{	my ($response,@lines)=@_;
-	my $error;
-	if	(!defined $response)		{$error=_"connection failed";}
-	elsif	($response eq 'OK')		{  }
-	elsif	($response=~m/^FAILED (.*)$/)	{$error=$1}
-	elsif	($response eq 'BADAUTH')	{$error=_("User authentification error"); $Stop='BadAuth';}
-	elsif	($response eq 'BANNED')		{$error=_("Client banned, contact gmusicbrowser's developer");	$Stop='Banned';}
-	elsif	($response eq 'BADTIME')	{$error=_("System clock is not close enough to the current time"); $Stop='BadTime';}
-	else					{$error=_"unknown error";}
-
-	if (defined $error)
-	{	unless ($Stop)
-		{	$interval*=2;
-			$interval=30*60 if $interval>30*60;
-			$interval=60 if $interval<60;
-			$error.= ::__x( ' (' . _("retry in {seconds} s") . ')', seconds => $interval);
-		}
-		Log(_("Handshake failed : ").$error);
-	}
-	else
-	{	($sessionid,$nowplayingurl,$submiturl)=@lines;
-		$interval=5;
-		$HandshakeOK=1;
-		$Serrors=0;
-		Log(_"Handshake OK");
-	}
-}
-
 sub Submit
-{	my $post="s=$sessionid";
+{
 	my $i=0;
-	my $url;
+	my $url= 'https://api.listenbrainz.org/1/submit-listens';
+	my $listen_type;
+	my $listened_at;
+	my @payload;
 	if (@ToSubmit)
-	{	while (my $aref=$ToSubmit[$i])
-		{	my @data= map { defined $_ ? ::url_escapeall($_) : "" } @$aref;
-			$post.=sprintf "&a[$i]=%s&t[$i]=%s&b[$i]=%s&m[$i]=%s&l[$i]=%s&i[$i]=%s&n[$i]=%s&o[$i]=%s&r[$i]=", @data;
-			$i++;
-			last if $i==50; #don't submit more than 50 songs at a time
-		}
-		$url=$submiturl;
-		return unless $i;
+	{	@payload= @ToSubmit;
+		$listen_type= "single";
+		$listened_at= time();
 	}
-	elsif ($NowPlaying)
-	{	if (!defined $::PlayingID || $::PlayingID!=$NowPlayingID) { $NowPlaying=undef; return }
-		my @data= map { defined $_ ? ::url_escapeall($_) : "" } @$NowPlaying;
-		$post.= sprintf "&a=%s&t=%s&b=%s&l=%s&n=%s&m=%s", @data;
-		$url=$nowplayingurl;
+	elsif (@NowPlaying)
+	{	if (!defined $::PlayingID || $::PlayingID!=$NowPlayingID) { @NowPlaying=undef; return }
+		@payload= @NowPlaying;
+		$listen_type= "playing_now";
+		$listened_at= undef;
 	}
 	else {return}
+	my $post= '{"listen_type": "'.$listen_type.'", "payload": [{';
+	$post.= '"listened_at": '.$listened_at.',' if $listened_at;
+	$post.= '"track_metadata": {"artist_name": "'.$payload[0].'", "track_name": "'.$payload[1].'"';
+	$post.=', "release_name": "'.$payload[2].'"' if $payload[2];
+	$post.='}}]}';
 	my $response_cb=sub
 	{	my ($response,@lines)=@_;
 		my $error;
-		if	(!defined $response) {$error=_"connection failed"; $Serrors++}
-		elsif	($response eq 'OK')
-		{	$Serrors=0;
-			if ($i)
-			{	Log( _("Submit OK") . ' ('.
-				      ($i>1 ?	  ::__n("%d song","%d songs",$i)
-						: ::__x( _"{song} by {artist}", song=> $ToSubmit[0][1], artist => $ToSubmit[0][0]) ) . ')' );
-				splice @ToSubmit,0,$i;
-				::IdleDo("9_".__PACKAGE__,10000,\&Save) if $unsent_saved;
-			}
-			elsif ($NowPlaying)
-			{	Log( _("Submit Now-Playing OK") . ' ('.
-				    ::__x( _"{song} by {artist}", song=> $NowPlaying->[1], artist => $NowPlaying->[0])  . ')' );
-				$NowPlaying=undef;
-			}
+		if	(!defined $response) {$error=_"connection failed";}
+		elsif	($response eq '{"status":"ok"}')
+		{	if (@ToSubmit) { 
+				Log( _("Submit OK ") .
+					::__x( _"{song} by {artist}", song=> $payload[1], artist => $payload[0]) );
+				undef @ToSubmit;
+				$interval=10;
+				return
+			};
+			if (@NowPlaying) {
+				Log( _("NowPlaying OK ") .
+					::__x( _"{song} by {artist}", song=> $payload[1], artist => $payload[0]) );
+				$interval=60;
+				return
+			};
 		}
 		elsif	($response eq 'BADSESSION')
 		{	$error=_"Bad session";
-			$HandshakeOK=0;
 		}
 		elsif	($response=~m/^FAILED (.*)$/)
 		{	$error=$1;
-			$Serrors++;
 		}
-		else	{$error=_"unknown error"; $Serrors++}
-
-		$HandshakeOK=0 if $Serrors && $Serrors>2;
+		else	{$error=_"unknown error";}
 
 		if (defined $error)
 		{	Log(_("Submit failed : ").$error);
+			Log(_("Response : ").$response) if $response;
+			$interval*=2;
 		}
 	};
 
-	warn "submitting: $post\n" if $::debug;
-	Send($response_cb,$url,$post);
+	my $authtoken=$::Options{OPT.'TOKEN'};
+	Send($response_cb,$url,$post,$authtoken);
 }
 
 sub SendNow
-{	$interval=5;
-	$Serrors=$Stop=undef;
+{	$interval=10;
+	$Stop=undef;
 	Glib::Source->remove($timeout) if $timeout;
 	Awake();
 }
+
 sub Sleep
-{	#warn "Sleep\n";
-	return unless $self->{on};
+{	return unless $self->{on};
 	::QHasChanged('Listenbrainz_state_change');
 	return if $Stop || $waiting || $timeout;
-	$timeout=Glib::Timeout->add(1000*$interval,\&Awake) if @ToSubmit || $NowPlaying;
-	#warn "Sleeping $interval seconds\n" if $timeout;
+	$timeout=Glib::Timeout->add(1000*$interval,\&Awake) if @ToSubmit || @NowPlaying;
 }
+
 sub Awake
-{	#warn "Awoke\n";
-	$timeout=undef;
+{	$timeout=undef;
 	return 0 if !$self->{on} || $waiting;
-	if ($HandshakeOK)	{ Submit(); }
-	else			{ Handshake(); }
+	Submit();
 	Sleep();
 	return 0;
 }
+
 sub Send
-{	my ($response_cb,$url,$post)=@_;
+{	my ($response_cb,$url,$post,$authtoken)=@_;
 	my $cb=sub
 	{	my @response=(defined $_[0])? split "\012",$_[0] : ();
 		$waiting=undef;
 		&$response_cb(@response);
 		Sleep();
 	};
-	$waiting=Simple_http::get_with_cb(cb => $cb,url => $url,post => $post);
+	$waiting=Simple_http::get_with_cb(cb => $cb,url => $url,post => $post,authtoken => $authtoken);
 	::QHasChanged('Listenbrainz_state_change');
 }
 
@@ -266,28 +222,6 @@ sub Log
 	$Log->set( $Log->prepend,0, localtime().'  '.$text );
 	warn "$text\n" if $::debug;
 	if (my $iter=$Log->iter_nth_child(undef,50)) { $Log->remove($iter); }
-}
-
-sub Load 	#read unsent data
-{	return unless -r $::HomeDir.SAVEFILE;
-	return unless open my$fh,'<:utf8',$::HomeDir.SAVEFILE;
-	while (my $line=<$fh>)
-	{	chomp $line;
-		my @data=split "\x1D",$line;
-		push @ToSubmit,\@data if @data==8;
-	}
-	close $fh;
-	Log(::__("Loaded %d unsent song from previous session","Loaded %d unsent songs from previous session", scalar @ToSubmit));
-}
-sub Save	#save unsent data to a file
-{	$unsent_saved=@ToSubmit;
-	unless (@ToSubmit)
-	{ unlink $::HomeDir.SAVEFILE; return }
-	my $fh;
-	unless (open $fh,'>:utf8',$::HomeDir.SAVEFILE)
-	 { warn "Error creating '$::HomeDir".SAVEFILE."' : $!\nUnsent listenbrainz.org data will be lost.\n"; return; }
-	print $fh join("\x1D",@$_)."\n" for @ToSubmit;
-	close $fh;
 }
 
 1;
