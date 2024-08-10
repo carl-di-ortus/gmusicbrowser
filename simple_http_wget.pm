@@ -44,16 +44,8 @@ sub get_with_cb
 	$cmd_and_args.= " --referer=$params{referer}" if $params{referer};
 	$cmd_and_args.= " --post-data='".$post."'" if $post;	#FIXME not sure if I should escape something
 	$cmd_and_args.= " -- '$url'";
-	warn "$cmd_and_args\n";
+	#warn "$cmd_and_args\n";
 
-	# my $useragent= $params{user_agent} || 'Mozilla/5.0';
-	# my @cmd_and_args= (qw/wget --timeout=40 -S -O -/, "--user-agent='$useragent'");
-	# push @cmd_and_args, "--header='Authorization: Token ".$authtoken."'" if $authtoken;
-	# push @cmd_and_args, "--header='Content-Type: application/json'" if $authtoken;
-	# push @cmd_and_args, "--referer=$params{referer}" if $params{referer};
-	# push @cmd_and_args, "--post-data='".$post."'" if $post;	#FIXME not sure if I should escape something
-	# push @cmd_and_args, '--',$url;
-	# warn "@cmd_and_args\n";
 	pipe my($content_fh),my$wfh;
 	pipe my($error_fh),my$ewfh;
 	my $pid=fork;
@@ -63,7 +55,6 @@ sub get_with_cb
 		open my($olderr), ">&", \*STDERR;
 		open \*STDOUT,'>&='.fileno $wfh;
 		open \*STDERR,'>&='.fileno $ewfh;
-		#exec @cmd_and_args  or print $olderr "launch failed (@cmd_and_args)  : $!\n";
 		exec $cmd_and_args  or print $olderr "launch failed ($cmd_and_args)  : $!\n";
 		POSIX::_exit(1);
 	}

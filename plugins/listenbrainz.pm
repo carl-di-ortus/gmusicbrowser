@@ -39,7 +39,9 @@ sub Start
 	$Stop=undef;
 }
 sub Stop
-{	$waiting->abort if $waiting;
+{	
+	@NowPlaying=undef;
+	$waiting->abort if $waiting;
 	Glib::Source->remove($timeout) if $timeout;
 	$timeout=$waiting=undef;
 	::UnWatch($self,$_) for qw/PlayingSong Played/;
@@ -89,18 +91,17 @@ sub update_queue_label
 }
 
 sub SongChanged
-{	if (defined $ignore_current_song)
+{	
+	@NowPlaying=undef;
+	if (defined $ignore_current_song)
 	{	return if defined $::SongID && $::SongID == $ignore_current_song;
 		$ignore_current_song=undef; ::HasChanged('Listenbrainz_ignore_current');
 	}
-	@NowPlaying=undef;
 	my ($title,$artist,$album)= Songs::Get($::SongID,qw/title artist album/);
 	return if $title eq '' || $artist eq '';
-	warn "set NowPlaying";
 	@NowPlaying= ( $artist, $title, $album );
 	$NowPlayingID=$::SongID;
 	$interval=10;
-	$timeout=undef;
 	Sleep();
 }
 
@@ -112,10 +113,8 @@ sub Played
 	if ($length>=30 && ($seconds >= 240 || $coverage >= .5) )
 	{	my ($title,$artist,$album)= Songs::Get($ID,qw/title artist album/);
 		return if $title eq '' || $artist eq '';
-		warn "set ToSumbit";
 		@ToSubmit= ( $artist, $title, $album );
 		$interval=10;
-		$timeout=undef;
 		Sleep();
 		::QHasChanged('Listenbrainz_state_change');
 	}
@@ -139,14 +138,16 @@ sub Submit
 		$listen_type= "playing_now";
 		$listened_at= undef;
 	}
-	else {return}
+	else { return; }
 	my $post= '{"listen_type": "'.$listen_type.'", "payload": [{';
 	$post.= '"listened_at": '.$listened_at.',' if $listened_at;
 	$post.= '"track_metadata": {"artist_name": "'.$payload[0].'", "track_name": "'.$payload[1].'"';
 	$post.=', "release_name": "'.$payload[2].'"' if $payload[2];
 	$post.='}}]}';
 	my $response_cb=sub
-	{	my ($response,@lines)=@_;
+	{	
+		my ($response,@lines)=@_;
+		#warn "response: $response";
 		my $error;
 		if	(!defined $response) {$error=_"connection failed";}
 		elsif	($response eq '{"status":"ok"}')
@@ -154,6 +155,7 @@ sub Submit
 				Log( _("Submit OK ") .
 					::__x( _"{song} by {artist}", song=> $payload[1], artist => $payload[0]) );
 				undef @ToSubmit;
+				undef $waiting;
 				$interval=10;
 				return
 			};
@@ -161,6 +163,7 @@ sub Submit
 				Log( _("NowPlaying OK ") .
 					::__x( _"{song} by {artist}", song=> $payload[1], artist => $payload[0]) );
 				$interval=60;
+				undef $waiting;
 				return
 			};
 		}
@@ -180,6 +183,9 @@ sub Submit
 	};
 
 	my $authtoken=$::Options{OPT.'TOKEN'};
+	#warn "PAYLOAD    - @payload";
+	#warn "NOWPLAYING - @NowPlaying";
+	#warn "TOSUBMIT   - @ToSubmit";
 	Send($response_cb,$url,$post,$authtoken);
 }
 
@@ -198,7 +204,8 @@ sub Sleep
 }
 
 sub Awake
-{	$timeout=undef;
+{	Glib::Source->remove($timeout) if $timeout;
+	$timeout=undef;
 	return 0 if !$self->{on} || $waiting;
 	Submit();
 	Sleep();
@@ -213,6 +220,7 @@ sub Send
 		&$response_cb(@response);
 		Sleep();
 	};
+
 	$waiting=Simple_http::get_with_cb(cb => $cb,url => $url,post => $post,authtoken => $authtoken);
 	::QHasChanged('Listenbrainz_state_change');
 }

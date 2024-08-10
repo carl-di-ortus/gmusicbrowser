@@ -28,7 +28,7 @@ sub get_with_cb
 	my %params=@_;
 	$self->{params}=\%params;
 	delete $params{cache} unless $UseCache;
-	my ($callback,$url,$post)=@params{qw/cb url post/};
+	my ($callback,$url,$post,$authtoken)=@params{qw/cb url post authtoken/};
 	if (my $cached= $params{cache} && GMB::Cache::get($url))
 	{	warn "cached result\n" if $::debug;
 		Glib::Timeout->add(10,sub { $callback->( ${$cached->{data}}, type=>$cached->{type}, filename=>$cached->{filename}, ); 0});
@@ -109,11 +109,16 @@ sub connecting_cb
 	print $socket "Host: $host:$port".EOL;
 	print $socket "User-Agent: $useragent".EOL;
 	print $socket "Referer: $params->{referer}".EOL if $params->{referer};
+	print $socket "Authorization: Token $params->{authtoken}".EOL if $params->{authtoken};
 	print $socket "Accept: $accept".EOL;
 	print $socket "Accept-Encoding: gzip".EOL if $gzip_ok;
 	#print $socket "Connection: Keep-Alive".EOL;
 	if (defined $post)
-	{ print $socket 'Content-Type: application/x-www-form-urlencoded; charset=utf-8'.EOL;
+	{ if ($params->{authtoken}) {
+		print $socket 'Content-Type: application/json'.EOL;
+	} else {
+		print $socket 'Content-Type: application/x-www-form-urlencoded; charset=utf-8'.EOL;
+	}
 	  print $socket "Content-Length: ".length($post).EOL.EOL;
 	  print $socket $post.EOL;
 	}
