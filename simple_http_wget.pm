@@ -42,10 +42,10 @@ sub get_with_cb
 	$cmd_and_args.= " --header='Authorization: Token ".$authtoken."'" if $authtoken;
 	$cmd_and_args.= " --header='Content-Type: application/json'" if $authtoken;
 	$cmd_and_args.= " --referer=$params{referer}" if $params{referer};
-	$cmd_and_args.= " --post-data='".$post."'" if $post;	#FIXME not sure if I should escape something
+	$cmd_and_args.= " --post-file='".$post."'" if $post;
 	$cmd_and_args.= " -- '$url'";
 	#warn "$cmd_and_args\n";
-
+	
 	pipe my($content_fh),my$wfh;
 	pipe my($error_fh),my$ewfh;
 	my $pid=fork;

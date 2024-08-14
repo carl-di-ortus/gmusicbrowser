@@ -15,11 +15,12 @@ desc	Submit played songs to listenbrainz
 package GMB::Plugin::LISTENBRAINZ;
 use strict;
 use warnings;
+use JSON;
 use constant
 {	CLIENTID => 'gmb', VERSION => '0.1',
 	OPT => 'PLUGIN_LISTENBRAINZ_',#used to identify the plugin's options
+	SAVEFILE => 'listenbrainz.queue', #file used to save unsent data
 };
-use Digest::MD5 'md5_hex';
 require $::HTTP_module;
 
 our $ignore_current_song;
@@ -139,19 +140,29 @@ sub Submit
 		$listened_at= undef;
 	}
 	else { return; }
-	my $post= '{"listen_type": "'.$listen_type.'", "payload": [{';
-	$post.= '"listened_at": '.$listened_at.',' if $listened_at;
-	$post.= '"track_metadata": {"artist_name": "'.$payload[0].'", "track_name": "'.$payload[1].'"';
-	$post.=', "release_name": "'.$payload[2].'"' if $payload[2];
-	$post.='}}]}';
+	my $post= {
+		listen_type => $listen_type,
+		payload => [
+			{
+				#listened_at => $listened_at,
+				track_metadata => {
+					artist_name => $payload[0],
+					track_name => $payload[1]
+					#release_name => $payload[2]
+				}
+			}
+		]
+	};
+	$post->{payload}[0]->{listened_at} = $listened_at if $listened_at;
+	$post->{payload}[0]->{track_metadata}->{release_name} = $payload[2] if $payload[2];
 	my $response_cb=sub
 	{	
 		my ($response,@lines)=@_;
-		#warn "response: $response";
 		my $error;
 		if	(!defined $response) {$error=_"connection failed";}
 		elsif	($response eq '{"status":"ok"}')
-		{	if (@ToSubmit) { 
+		{	unlink $::HomeDir.SAVEFILE;
+			if (@ToSubmit) { 
 				Log( _("Submit OK ") .
 					::__x( _"{song} by {artist}", song=> $payload[1], artist => $payload[0]) );
 				undef @ToSubmit;
@@ -183,10 +194,8 @@ sub Submit
 	};
 
 	my $authtoken=$::Options{OPT.'TOKEN'};
-	#warn "PAYLOAD    - @payload";
-	#warn "NOWPLAYING - @NowPlaying";
-	#warn "TOSUBMIT   - @ToSubmit";
-	Send($response_cb,$url,$post,$authtoken);
+	Save($post);
+	Send($response_cb,$url,$::HomeDir.SAVEFILE,$authtoken);
 }
 
 sub SendNow
@@ -230,6 +239,18 @@ sub Log
 	$Log->set( $Log->prepend,0, localtime().'  '.$text );
 	warn "$text\n" if $::debug;
 	if (my $iter=$Log->iter_nth_child(undef,50)) { $Log->remove($iter); }
+}
+
+sub Save
+{	my $savebody=$_[0];
+	unless ($savebody)
+	{ unlink $::HomeDir.SAVEFILE; return }
+	my $fh;
+	unless (open $fh,'>:utf8',$::HomeDir.SAVEFILE)
+	 { warn "Error creating '$::HomeDir".SAVEFILE."' : $!\nUnsent listenbrainz.org data will be lost.\n"; return; }
+	my $json=(to_json $savebody);
+	print $fh $json;
+	close $fh;
 }
 
 1;
