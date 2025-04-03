@@ -1151,6 +1151,24 @@ our %timespan_menu=
 	editsubmenu=>0,
 	category=>'extra',
  },
+# https://github.com/carl-di-ortus/gmusicbrowser/issues/3
+# https://picard-docs.musicbrainz.org/downloads/MusicBrainz_Picard_Tag_Map.html
+#  musicbrainz_trackid =>
+#  {	name => _"MBID",
+# 	id3v2		=> 'TXXX;MusicBrainz Release Track Id;%v',	vorbis	=> 'musicbrainz_releasetrackid',	ape	=> 'MUSICBRAINZ_RELEASETRACKID', ilst => "----:com.apple.iTunes:MusicBrainz Release Track Id", 'id3v2.3'		=> 'TXXX;MusicBrainz Release Track Id;%v',
+#  	flags => 'fgaescpi',
+#  	type => 'string',
+# 	category=>'extra',
+# 	postread=> sub { my $v=shift; warn "V $v"; },
+#  },
+#  acoustid =>
+#  {	name => _"AcoustID",
+#  	id3v2		=> 'TXXX;Acoustid Id;%v',	vorbis	=> 'ACOUSTID_ID',	ape	=> 'ACOUSTID_ID', ilst => "----:com.apple.iTunes:Acoustid Id",
+#  	flags => 'fgaescpi',
+#  	type => 'string',
+# 	category=>'extra',
+# 	postread=> sub { my $v=shift },
+#  },
  style	=>
  {	name	=> _"Styles",	width => 180,	flags => 'fgaescpil',
 	type		=> 'flags',

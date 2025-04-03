@@ -22,7 +22,7 @@ sub get_with_cb
 {	my $self=bless {};
 	my %params=@_;
 	$self->{params}=\%params;
-	my ($callback,$url,$post)=@params{qw/cb url post/};
+	my ($callback,$url,$post,$authtoken)=@params{qw/cb url post authtoken/};
 	delete $params{cache} unless $UseCache;
 	if (my $cached= $params{cache} && GMB::Cache::get($url))
 	{	warn "cached result\n" if $::debug;
@@ -36,13 +36,16 @@ sub get_with_cb
 							: $orig_proxy;
 	$ENV{http_proxy}=$proxy;
 
-	my $useragent= $params{user_agent} || 'Mozilla/5.0';
-	my $accept= $params{'accept'} || '';
-	my $gzip= $gzip_ok ? '--header=Accept-Encoding: gzip' : '';
-	my @cmd_and_args= (qw/wget --timeout=40 -S -O -/, $gzip, "--header=Accept: $accept", "--user-agent=$useragent");
-	push @cmd_and_args, "--referer=$params{referer}" if $params{referer};
-	push @cmd_and_args, '--post-data='.$post if $post;	#FIXME not sure if I should escape something
-	push @cmd_and_args, '--',$url;
+	my $cmd_and_args= 'wget --timeout=40 -S -O -';
+	$cmd_and_args.= " -U ".($params{user_agent} || "'Mozilla/5.0'");
+	$cmd_and_args.= " --header='Accept-Encoding: gzip'" if $gzip_ok;
+	$cmd_and_args.= " --header='Authorization: Token ".$authtoken."'" if $authtoken;
+	$cmd_and_args.= " --header='Content-Type: application/json'" if $authtoken;
+	$cmd_and_args.= " --referer=$params{referer}" if $params{referer};
+	$cmd_and_args.= " --post-file='".$post."'" if $post;
+	$cmd_and_args.= " -- '$url'";
+	#warn "$cmd_and_args\n";
+	
 	pipe my($content_fh),my$wfh;
 	pipe my($error_fh),my$ewfh;
 	my $pid=fork;
@@ -52,7 +55,7 @@ sub get_with_cb
 		open my($olderr), ">&", \*STDERR;
 		open \*STDOUT,'>&='.fileno $wfh;
 		open \*STDERR,'>&='.fileno $ewfh;
-		exec @cmd_and_args  or print $olderr "launch failed (@cmd_and_args)  : $!\n";
+		exec $cmd_and_args  or print $olderr "launch failed ($cmd_and_args)  : $!\n";
 		POSIX::_exit(1);
 	}
 	close $wfh; close $ewfh;
