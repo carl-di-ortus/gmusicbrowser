@@ -16,9 +16,10 @@ package GMB::Plugin::LISTENBRAINZ;
 use strict;
 use warnings;
 use JSON;
+use List::Util qw(max);
 use constant
 {	CLIENTID => 'gmb', VERSION => '0.1',
-	OPT => 'PLUGIN_LISTENBRAINZ_',#used to identify the plugin's options
+	OPT => 'PLUGIN_LISTENBRAINZ_', #used to identify the plugin's options
 	SAVEFILE => 'listenbrainz.queue', #file used to save unsent data
 };
 require $::HTTP_module;
@@ -103,7 +104,7 @@ sub SongChanged
 	@NowPlaying= ( $artist, $title, $album );
 	$NowPlayingID=$::SongID;
 	$interval=10;
-	Sleep();
+	SendNow();
 }
 
 sub Played
@@ -190,6 +191,7 @@ sub Submit
 		{	Log(_("Submit failed : ").$error);
 			Log(_("Response : ").$response) if $response;
 			$interval*=2;
+			$interval=max($interval, 300);
 		}
 	};
 
