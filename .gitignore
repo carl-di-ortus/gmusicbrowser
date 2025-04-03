@@ -4,3 +4,6 @@ locale/
 po/gmusicbrowser.pot
 nytprof*
 t/samples/
+
+.vscode/
+TODO
