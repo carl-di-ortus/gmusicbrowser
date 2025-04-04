@@ -534,7 +534,7 @@ require 'gmusicbrowser_songs.pm';
 require 'gmusicbrowser_tags.pm';
 require 'gmusicbrowser_layout.pm';
 require 'gmusicbrowser_list.pm';
-require 'simple_http_wget.pm';
+require 'simple_http.pm';
 
  # load gstreamer backend module
  if (!$CmdLine{nogst})

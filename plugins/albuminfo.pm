@@ -21,7 +21,7 @@ package GMB::Plugin::ALBUMINFO;
 use strict;
 use warnings;
 use utf8;
-require 'simple_http_wget.pm';
+require 'simple_http.pm';
 use base 'Gtk3::Box';
 use constant
 {	OPT	=> 'PLUGIN_ALBUMINFO_',
