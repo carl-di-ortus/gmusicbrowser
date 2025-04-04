@@ -203,7 +203,6 @@ sub Submit
 sub SendNow
 {	$interval=10;
 	$Stop=undef;
-	Glib::Source->remove($timeout) if $timeout;
 	Awake();
 }
 
