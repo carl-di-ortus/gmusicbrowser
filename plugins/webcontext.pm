@@ -229,8 +229,6 @@ sub new
 	my $stop= $self->{BStop}= Gtk3::ToolButton->new_from_stock('gtk-stop');
 	my $open= $self->{BOpen}= Gtk3::ToolButton->new_from_stock('gtk-open');
 	$open->set_tooltip_text(_"Open this page in the web browser");
-	#$open->set_use_drag_window(1);
-	#::set_drag($open,source=>[::DRAG_FILE,sub {$embed->get_location;}]);
 	$self->{$_}->set_sensitive(0) for qw/BBack BNext BStop BOpen/;
 
 	my $entryitem= Gtk3::ToolItem->new;
@@ -286,7 +284,7 @@ sub load_url
 	$self->{url}=$url;
 	$self->{post}=$post;
 	if ($post)
-	{ Simple_http::get_with_cb(cb => sub {$self->loaded(@_)},url => $url,post => $post); }
+	{ Simple_http::post_with_cb(cb => sub {$self->loaded(@_)},url => $url,post => $post); }
 	else {$self->Open($url);}
 }
 

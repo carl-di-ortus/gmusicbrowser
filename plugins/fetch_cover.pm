@@ -205,11 +205,7 @@ sub NewSearch
 	$self->{url}= $url;
 	$self->{searchcontext}={}; #hash that the parser can use to store data between searches
 	warn "fetchcover : loading $url\n" if $::debug;
-	$self->{waiting}=Simple_http::get_with_cb
-	 (	cb => sub {$self->searchresults_cb(@_)},
-		url => $url,	cache=>1,
-		user_agent => $self->{user_agent},
-	 );
+	Simple_http::get_with_cb(cb => sub {$self->searchresults_cb(@_)}, url => $url);
 }
 
 sub InitPage
@@ -410,7 +406,6 @@ sub parse_discogs
 
 sub searchresults_cb
 {	my ($self,$result)=@_;
-	$self->{waiting}=undef;
 	warn "Getting results from $self->{url}\n" if $::Verbose;
 	unless (defined $result) { stop($self,_"connection failed."); return; }
 	my $parse= $Sites{$self->{mainfield}}{$self->{site}}[2];
@@ -429,10 +424,7 @@ sub abort
 	my $results=$self->{results};
 	for my $r ($self,@$results)
 	{	delete $r->{done};
-		$r->{waiting}->abort if $r->{waiting};
-		delete $r->{waiting};
 	}
-	delete $self->{waiting};
 	delete $::ToDo{'8_FetchCovers'.$self};
 }
 
@@ -453,41 +445,33 @@ sub get_next
 {	my $self=shift;
 	my $results=$self->{results};
 	my $res_id;
-	my $waiting;
 	my $start= $self->{page} * RES_PER_PAGE;
 	my $end= $start + RES_PER_PAGE -1;
 	if ($#$results<$end && $self->{nexturl})
 	{	#load next page
 		my $url= $self->{url}= delete $self->{nexturl};
-		$self->{waiting}=Simple_http::get_with_cb
-		 (	cb => sub {$self->searchresults_cb(@_)},
-			url => $url,	cache=>1,
-			user_agent => $self->{user_agent},
-		 );
+		Simple_http::get_with_cb(cb => sub {$self->searchresults_cb(@_)}, url => $url);
 	}
 	elsif ($#$results>=$end)
 	{	$self->{Bnext}->set_sensitive(1);
 	}
 	$end=$#$results if $#$results<$end;
 	for my $id ($start .. $end)
-	{	#warn "$id : waiting=".$results->[$id]{waiting}." done=".$results->[$id]{done};
-		if ($results->[$id]{waiting}) {$waiting++; next};
+	{	
 		next if $results->[$id]{done};
 		$res_id=$id;
 		last;
 	}
-	unless (defined $res_id || $waiting || $self->{waiting})
+	unless (defined $res_id)
 	{	$self->stop;
 		return;
 	}
 	return unless defined $res_id;
-	return if $waiting && $waiting > 3; #no more than 4 pictures at once
 
 	my $result=$self->{results}[$res_id];
-	$result->{waiting}=Simple_http::get_with_cb(url => $result->{url}, referer=>$result->{referer}, cache=>1, cb =>
+	Simple_http::get_with_cb(url => $result->{url}, referer=>$result->{referer}, cb =>
 	sub
 	{	my $pixdata=$_[0];
-		$result->{waiting}=undef;
 		my $loader;
 		$loader= GMB::Picture::LoadPixData($pixdata,PREVIEW_SIZE) if $pixdata;
 		if ($loader)

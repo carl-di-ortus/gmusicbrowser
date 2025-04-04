@@ -209,8 +209,7 @@ sub destroy_event_cb
 sub cancel
 {	my $self=shift;
 	delete $::ToDo{'8_lyrics'.$self};
-	$self->{waiting}->abort if $self->{waiting};
-	$self->{waiting}=$self->{pixtoload}=undef;
+	$self->{pixtoload}=undef;
 }
 
 sub prefbox
@@ -426,12 +425,11 @@ sub load_url
 	$self->{url}=$url;
 	$self->{post}=$post;
 	$self->{check}=$check; # function to check if lyrics found
-	$self->{waiting}=Simple_http::get_with_cb(cb => sub {$self->loaded(@_)},url => $url,post => $post);
+	Simple_http::post_with_cb(cb => sub {$self->loaded(@_)},url => $url,post => $post);
 }
 
 sub loaded #_very_ crude html to gtktextview renderer
 {	my ($self,$data,%data_prop)=@_;
-	delete $self->{waiting};
 	my $type=$data_prop{type};
 	my $buffer=$self->{buffer};
 	my $encoding;
@@ -578,9 +576,9 @@ sub load_pixbuf
 	my $ref=shift @{ $self->{pixtoload} };
 	return 0 unless $ref;
 	my ($mark,$url,$link)=@$ref;
-	$self->{waiting}=Simple_http::get_with_cb(url => $self->full_url($url), cache=>1, cb=>
+	Simple_http::get_with_cb(url => $self->full_url($url), cb=>
 	sub
-	{	$self->{waiting}=undef;
+	{
 		my $loader;
 		$loader= GMB::Picture::LoadPixData($_[0]) if $_[0];
 		if ($loader)
@@ -597,36 +595,8 @@ sub load_pixbuf
 		}
 		::IdleDo('8_FetchPix'.$self,100,\&load_pixbuf,$self); #load next
 	});
-#::IdleDo('8_FetchPix'.$self,100,\&load_pixbuf,$self) unless $self->{waiting};
 }
 
-#sub loaded_old #old method, more crude :)
-#{	my $self=shift;
-#	my $buffer=$self->{buffer};
-#	unless ($_[0]) {$buffer->delete($buffer->get_bounds);$buffer->set_text(_"Loading failed.");return;}
-#	local $_=$_[0];
-#	s/[\r\n]//g;
-#	s#<title>.*?</title>##;
-#	s#<script .*?</script>##g;
-#	s#<a href="([^"]+)">(.*?)</a>#<>$2<>$1<>#g;
-#	s#<br(?: /)?>#\n#g;
-#	s/<[^>]+>//g;
-#	s/^\n+//;
-#	s/BADSONG\n+$//;
-
-#	$buffer->delete($buffer->get_bounds);
-#	my @l=split /(<>)/,$_;
-#	while (defined ($_=shift @l))
-#	{	my $iter=($buffer->get_bounds)[1];
-#		if ($_ eq '<>')
-#		{	my ($text,undef,$url,undef)=splice @l,0,4;
-#			my $tag=$buffer->create_tag(undef,foreground => 'blue',underline => 'single');
-#			$tag->{url}=$url;
-#			$buffer->insert_with_tags($iter, $text, $tag);
-#		}
-#		else { $buffer->insert($iter, $_);}
-#	}
-#}
 my %zoomkeymap;
 BEGIN { %zoomkeymap=( plus=>1, minus=>-1, KP_Add=>1, KP_Subtract=>-1 ); }
 sub key_pressed_cb

@@ -10304,19 +10304,13 @@ sub Start
 	{	
 		warn "Downloading '$display_uri' to '$destpath'\n" if $::debug;
 		::Progress( $progressid, bartext_append=>$display_uri, title=>_"Downloading");
-		$self->{waiting}= Simple_http::get_with_cb(url => $uri, cache=>1, progress=>1, cb => sub { $self->Downloaded(@_); });
-		$self->{track_progress} ||= Glib::Timeout->add(200,
-		 sub {	if (my $w= $self->{waiting}) { my ($p,$s)=$w->progress; ::Progress( $progressid, partial=>$p ) if defined $p; }
-			else { $self->{track_progress}=0 }
-			return $self->{track_progress};
-		     });
+		Simple_http::get_with_cb(url => $uri, cb => sub { $self->Downloaded(@_); });
 		return
 	}
 }
 
 sub Downloaded
 {	my ($self,$content,%content_prop)=@_;
-	delete $self->{waiting};
 	my $type=$content_prop{type};
 	my $params= $self->{current};
 	my $uri= $params->{uri};
@@ -10404,7 +10398,6 @@ sub Done # file done, if no $self->{newfile} it means the file has been skipped
 }
 sub Abort	# GMB::DropURI object must not be used after that
 {	my $self=shift;
-	$self->{waiting}->abort if $self->{waiting};
 	Glib::Source->remove( $self->{track_progress} ) if $self->{track_progress};
 	::Progress( 'DropURI_'.$self, abort=>1 );
 	$self->{cb_end}() if $self->{cb_end};

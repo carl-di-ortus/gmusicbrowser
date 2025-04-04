@@ -27,7 +27,7 @@ our $ignore_current_song;
 
 my $self=bless {},__PACKAGE__;
 my @ToSubmit; my $NowPlaying; my $NowPlayingID; my $unsent_saved=0;
-my $interval=5; my ($timeout,$waiting);
+my $interval=5; my $timeout;
 my ($HandshakeOK,$submiturl,$nowplayingurl,$sessionid);
 my ($Serrors,$Stop);
 my $Log= Gtk3::ListStore->new('Glib::String');
@@ -43,9 +43,9 @@ sub Start
 	$Serrors=$Stop=undef;
 }
 sub Stop
-{	$waiting->abort if $waiting;
+{	
 	Glib::Source->remove($timeout) if $timeout;
-	$timeout=$waiting=undef;
+	$timeout=undef;
 	::UnWatch($self,$_) for qw/PlayingSong Played Save/;
 	$self->{on}=undef;
 	$interval=5;
@@ -86,10 +86,10 @@ sub prefbox
 sub update_queue_label
 {	my $qbox=shift;
 	my $label= $qbox->{label};
-	if (@ToSubmit && (@ToSubmit>1 || (!$waiting && (!$timeout || $interval>10))))
+	if (@ToSubmit && (@ToSubmit>1 || (!$timeout || $interval>10)))
 	{	$label->set_text(::__n("%d song waiting to be sent","%d songs waiting to be sent", scalar @ToSubmit ));
 		$label->get_parent->show;
-		$qbox->{button}->set_sensitive(!$waiting);
+		$qbox->{button}->set_sensitive();
 	}
 	else { $label->get_parent->hide }
 }
@@ -236,14 +236,14 @@ sub Sleep
 {	#warn "Sleep\n";
 	return unless $self->{on};
 	::QHasChanged('Lastfm_state_change');
-	return if $Stop || $waiting || $timeout;
+	return if $Stop || $timeout;
 	$timeout=Glib::Timeout->add(1000*$interval,\&Awake) if @ToSubmit || $NowPlaying;
 	#warn "Sleeping $interval seconds\n" if $timeout;
 }
 sub Awake
 {	#warn "Awoke\n";
 	$timeout=undef;
-	return 0 if !$self->{on} || $waiting;
+	return 0 if !$self->{on};
 	if ($HandshakeOK)	{ Submit(); }
 	else			{ Handshake(); }
 	Sleep();
@@ -253,11 +253,10 @@ sub Send
 {	my ($response_cb,$url,$post)=@_;
 	my $cb=sub
 	{	my @response=(defined $_[0])? split "\012",$_[0] : ();
-		$waiting=undef;
 		&$response_cb(@response);
 		Sleep();
 	};
-	$waiting=Simple_http::get_with_cb(cb => $cb,url => $url,post => $post);
+	Simple_http::post_with_cb(cb => $cb,url => $url,post => $post);
 	::QHasChanged('Lastfm_state_change');
 }
 

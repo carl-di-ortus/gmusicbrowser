@@ -49,7 +49,6 @@ my %menuitem=
 	test => sub {$_[0]{mainfield} eq 'artist'},	#the menu item is displayed if returns true
 );
 my $nowplayingaID;
-my $queuewaiting;
 my %queuemode=
 (	order=>10, icon=>'gtk-refresh',	short=> _"similar-artists",		long=> _"Auto-fill queue with similar artists (from last.fm)",	changed=>\&QAutofillSimilarArtists,	keep=>1,save=>1,autofill=>1,
 );
@@ -97,7 +96,6 @@ sub Stop {
 	Layout::RegisterWidget(PluginArtistinfo => undef);
 	@::cMenuAA=  grep $_!=\%menuitem, @::SongCMenu;
 	delete $::QActions{'autofill-similar-artists'}; ::Update_QueueActionList();
-	$queuewaiting->abort if $queuewaiting; $queuewaiting=undef;
 }
 
 sub new
@@ -271,7 +269,6 @@ sub destroy_event_cb
 sub cancel
 {	my $self=shift;
 	delete $::ToDo{'8_artistinfo'.$self};
-	$self->{waiting}->abort if $self->{waiting};
 }
 
 sub prefbox
@@ -506,12 +503,11 @@ sub load_url
 	warn "info : loading $url\n" if $::debug;
 	$self->{url}=$url;
 	$self->{sw2}->hide; $self->{sw1}->show;
-	$self->{waiting}=Simple_http::get_with_cb(cb => sub {$self->loaded(@_)},url => $url, cache => 1);
+	Simple_http::get_with_cb(cb => sub {$self->loaded(@_)},url => $url);
 }
 
 sub loaded
 {	my ($self,$data,%prop)=@_;
-	delete $self->{waiting};
 	my $buffer=$self->{buffer};
 	my $type=$prop{type};
 	unless ($data) { $data=_("Loading failed.").qq( <a href="$self->{url}">)._("retry").'</a>'; $type="text/html"; }
@@ -669,7 +665,7 @@ sub Save_text
 }
 
 sub QAutofillSimilarArtists
-{	$queuewaiting->abort if $queuewaiting; $queuewaiting=undef;
+{	
 	return unless $::QueueAction eq 'autofill-similar-artists';
 	return if $::Options{MaxAutoFill}<=@$::Queue;
 	return unless $::SongID;
@@ -679,11 +675,11 @@ sub QAutofillSimilarArtists
 
 	my $url = GetUrl($sites{similar}[0],$nowplayingaID);
 	return unless $url;
-	$queuewaiting=Simple_http::get_with_cb(url => $url, cb => \&PopulateQueue );
+	Simple_http::get_with_cb(url => $url, cb => \&PopulateQueue );
 }
 
 sub PopulateQueue
-{	$queuewaiting=undef;
+{
 	if ( $nowplayingaID != Songs::Get_gid($::SongID,'artist')) { QAutofillSimilarArtists; return; }
 	my $data = $_[0];
 

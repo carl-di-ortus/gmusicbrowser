@@ -153,7 +153,7 @@ sub download_one {
 	} else {
 		my $url = AMG_SEARCH_URL.::url_escapeall($album);
 		warn "Albuminfo: fetching search results from $url\n" if $::debug;
-		$self->{waiting} = Simple_http::get_with_cb(url=>$url, cache=>1, cb=>sub {$self->load_search_results($ID,1,\&download_one,@_)});
+		Simple_http::get_with_cb(url=>$url, cb=>sub {$self->load_search_results($ID,1,\&download_one,@_)});
 	}
 }
 
@@ -512,12 +512,11 @@ sub new_search {
 	$self->cancel();
 	$self->{treeview}->get_model->clear;
 	warn "Albuminfo: fetching search results from $url.\n" if $::debug;
-	$self->{waiting} = Simple_http::get_with_cb(cb=>sub {$self->print_results(@_)},url=>$url, cache=>1);
+	Simple_http::get_with_cb(cb=>sub {$self->print_results(@_)},url=>$url);
 }
 
 sub print_results {
 	my ($self,$html,%prop) = @_;
-	delete $self->{waiting};
 	my $result = parse_amg_search_results($html, $prop{type}); # result is a ref to an array of hash refs
 	my $store= $self->{treeview}->get_model;
 	$store->set_sort_column_id(5, 'ascending');
@@ -534,8 +533,8 @@ sub entry_selected_cb {
 	my $url = $store->get($store->get_iter($path),4);
 	warn "Albuminfo: fetching review from $url\n" if $::debug;
 	$self->cancel();
-	$self->{waiting} = Simple_http::get_with_cb(cb=>sub {$self->{searchview}->hide(); $self->{infoview}->show();
-		$self->load_review(::GetSelID($self),0,undef,$url,@_)}, url=>$url, cache=>1);
+	Simple_http::get_with_cb(cb=>sub {$self->{searchview}->hide(); $self->{infoview}->show();
+		$self->load_review(::GetSelID($self),0,undef,$url,@_)}, url=>$url);
 }
 
 
@@ -580,7 +579,7 @@ sub album_changed {
 		}
 	}
 	warn "Albuminfo: fetching search results from $url\n" if $::debug;
-	$self->{waiting} = Simple_http::get_with_cb(cb=>sub {$self->load_search_results($ID,0,undef,@_)}, url=>$url, cache=>1);
+	Simple_http::get_with_cb(cb=>sub {$self->load_search_results($ID,0,undef,@_)}, url=>$url);
 }
 
 sub update_titlebox {
@@ -600,7 +599,6 @@ sub update_titlebox {
 
 sub load_search_results {
 	my ($self,$ID,$md,$cb,$html,%prop) = @_; # $md = 1 if mass_download, 0 otherwise. $cb = callback function if mass_download, undef otherwise.
-	delete $self->{waiting};
 	my $result = parse_amg_search_results($html, $prop{type}); # $result[$i] = {url, album, artist, genres, year}
 	my ($artist,$year) = ::Songs::Get($ID, qw/artist year/);
 	my $url;
@@ -616,7 +614,7 @@ sub load_search_results {
 	}
 	if ($url) {
 		warn "Albuminfo: fetching review from $url\n" if $::debug;
-		$self->{waiting} = Simple_http::get_with_cb(cb=>sub {$self->load_review($ID,$md,$cb,$url,@_)}, url=>$url, cache=>1);
+		Simple_http::get_with_cb(cb=>sub {$self->load_review($ID,$md,$cb,$url,@_)}, url=>$url);
 	} else {
 		$self->{fields} = {};
 		warn "Albuminfo: album not found in search results\n" if $::debug;
@@ -627,7 +625,6 @@ sub load_search_results {
 
 sub load_review {
 	my ($self,$ID,$md,$cb,$url,$html,%prop) = @_;
-	delete $self->{waiting};
 	$self->{fields} = parse_amg_album_page($url,$html,$prop{type});
 	$self->print_review() unless $md;
 	save_review($ID, $self->{fields}) if $::Options{OPT.'AutoSave'} || $md;
@@ -804,7 +801,6 @@ sub cancel {
 	my $self = shift;
 	delete $::ToDo{'9_load_albuminfo'.$self};
 	delete $::ToDo{'9_refresh_albuminfo'.$self};
-	$self->{waiting}->abort() if $self->{waiting};
 	::Progress('albuminfo', abort=>1);
 	$self->{abort}=1;
 }
