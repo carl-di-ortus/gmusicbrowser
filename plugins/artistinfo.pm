@@ -19,7 +19,7 @@ package GMB::Plugin::ARTISTINFO;
 use strict;
 use warnings;
 use utf8;
-require $::HTTP_module;
+require 'simple_http_wget.pm';
 use base 'Gtk3::Box';
 use constant
 {	OPT	=> 'PLUGIN_ARTISTINFO_', # MUST begin by PLUGIN_ followed by the plugin ID / package name

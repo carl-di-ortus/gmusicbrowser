@@ -14,7 +14,7 @@ desc	Adds a menu entry to artist/album context menu, allowing to search the pict
 package GMB::Plugin::FETCHCOVER;
 use strict;
 use warnings;
-require $::HTTP_module;
+require 'simple_http_wget.pm';
 use base 'Gtk3::Window';
 use constant
 {	OPT => 'PLUGIN_FETCHCOVER_',

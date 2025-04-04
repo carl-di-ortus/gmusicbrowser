@@ -528,18 +528,13 @@ Options to change what is done with files/folders passed as arguments (done in r
 }
 # end of command line handling
 
-our $HTTP_module;
 our ($Play_package,%PlayPacks); my ($PlayNext_package,$Vol_package);
 BEGIN{
 require 'gmusicbrowser_songs.pm';
 require 'gmusicbrowser_tags.pm';
 require 'gmusicbrowser_layout.pm';
 require 'gmusicbrowser_list.pm';
-$HTTP_module=	-e $DATADIR.SLASH.'simple_http_wget.pm' && (grep -x $_.SLASH.'wget', split /:/, $ENV{PATH})	? 'simple_http_wget.pm' :
-		-e $DATADIR.SLASH.'simple_http_AE.pm'   && (grep -f $_.SLASH.'AnyEvent'.SLASH.'HTTP.pm', @INC)	? 'simple_http_AE.pm' :
-		'simple_http.pm';
-#warn "using $HTTP_module for http requests\n";
-#require $HTTP_module;
+require 'simple_http_wget.pm';
 
  # load gstreamer backend module
  if (!$CmdLine{nogst})
@@ -10306,7 +10301,7 @@ sub Start
 		$self->Done;
 	}
 	else
-	{	unless (eval {require $::HTTP_module}) {warn "Loading $::HTTP_module failed, can't download $display_uri\n"; $self->Done; return}
+	{	
 		warn "Downloading '$display_uri' to '$destpath'\n" if $::debug;
 		::Progress( $progressid, bartext_append=>$display_uri, title=>_"Downloading");
 		$self->{waiting}= Simple_http::get_with_cb(url => $uri, cache=>1, progress=>1, cb => sub { $self->Downloaded(@_); });

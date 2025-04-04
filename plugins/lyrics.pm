@@ -15,7 +15,7 @@ package GMB::Plugin::LYRICS;
 use strict;
 use warnings;
 use utf8;
-require $::HTTP_module;
+require 'simple_http_wget.pm';
 our @ISA;
 BEGIN {push @ISA,'GMB::Context';}
 use base 'Gtk3::Box';
