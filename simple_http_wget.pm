@@ -8,14 +8,43 @@
 package Simple_http;
 use strict;
 use warnings;
-use POSIX ':sys_wait_h';	#for WNOHANG in waitpid
-use IO::Handle;
+use LWP::UserAgent;
 
-my $UseCache= *GMB::Cache::add{CODE};
-my $orig_proxy=$ENV{http_proxy};
-my $gzip_ok;
-BEGIN
-{	eval { require IO::Uncompress::Gunzip; $gzip_ok=1; };
+my $proxy= $::Options{Simplehttp_Proxy}
+	? $::Options{Simplehttp_ProxyHost}.':'.($::Options{Simplehttp_ProxyPort}||3128)
+	: '';
+
+sub post_with_cb
+{
+	my $self=bless {};
+	my %params=@_;
+	$self->{params}=\%params;
+	my ($callback,$url,$post,$authtoken)=@params{qw/cb url post authtoken/};
+
+	my $ua = LWP::UserAgent->new();
+	#$ua->agent('Mozilla/5.0');
+	$ua->default_header('Authorization' => "Token $authtoken") if $authtoken;
+	$ua->default_header('Content-Type' => 'application/json') if $authtoken;
+	$ua->proxy("https", "connect://$proxy/") if $proxy;
+	$ua->timeout(40);
+
+	open my $fh, '<', $post or die "failed to open: $!";
+	my $content = do { local $/; <$fh> };
+	close $fh;
+
+	my $response = $ua->post($url,
+		Content_Type => 'application/json',
+    	Content => $content );
+
+	my $result = $response->decoded_content;
+	if ($response->is_success) {
+		$callback->($result, error=>undef);
+	}
+	else {
+		warn "Error fetching $url : $result\n";
+		warn $response->status_line;
+		$callback->($response->status_line, error=>$result);
+	}
 }
 
 sub get_with_cb
@@ -23,22 +52,11 @@ sub get_with_cb
 	my %params=@_;
 	$self->{params}=\%params;
 	my ($callback,$url,$post,$authtoken)=@params{qw/cb url post authtoken/};
-	delete $params{cache} unless $UseCache;
-	if (my $cached= $params{cache} && GMB::Cache::get($url))
-	{	warn "cached result\n" if $::debug;
-		Glib::Timeout->add(10,sub { $callback->( ${$cached->{data}}, type=>$cached->{type}, filename=>$cached->{filename}, ); 0});
-		return $self;
-	}
 
 	warn "simple_http_wget : fetching $url\n" if $::debug;
 
-	my $proxy= $::Options{Simplehttp_Proxy} ?	$::Options{Simplehttp_ProxyHost}.':'.($::Options{Simplehttp_ProxyPort}||3128)
-							: $orig_proxy;
-	$ENV{http_proxy}=$proxy;
-
 	my $cmd_and_args= 'wget --timeout=40 -S -O -';
 	$cmd_and_args.= " -U ".($params{user_agent} || "'Mozilla/5.0'");
-	$cmd_and_args.= " --header='Accept-Encoding: gzip'" if $gzip_ok;
 	$cmd_and_args.= " --header='Authorization: Token ".$authtoken."'" if $authtoken;
 	$cmd_and_args.= " --header='Content-Type: application/json'" if $authtoken;
 	$cmd_and_args.= " --referer=$params{referer}" if $params{referer};
@@ -72,12 +90,15 @@ sub get_with_cb
 	return $self;
 }
 
+#private
 sub receiving_e_cb
 {	my $self=$_[2];
 	return 1 if read $self->{error_fh},$self->{ebuffer},1024,length($self->{ebuffer});
 	close $self->{error_fh};
 	return $self->{ewatch}=0;
 }
+
+#private
 sub receiving_cb
 {	my $self=$_[2];
 	return 1 if read $self->{content_fh},$self->{content},1024,length($self->{content});
@@ -94,7 +115,7 @@ sub receiving_cb
 	my $filename;
 	while ($self->{ebuffer}=~m#^  Content-Disposition:\s*\w+\s*;\s*filename(\*)?=(.*)$#mgi)
 	{	$filename=$2; my $rfc5987=$1;
-		#decode filename, not perfectly, but good enough (http://greenbytes.de/tech/tc2231/ is a good reference)
+		
 		$filename=~s#\\(.)#"\x00".ord($1)."\x00"#ge;
 		my $enc='iso-8859-1';
 		if ($rfc5987 && $filename=~s#^([A-Za-z0-9_-]+)'\w*'##) {$enc=$1; $filename=::decode_url($filename)} #RFC5987
@@ -105,24 +126,9 @@ sub receiving_cb
 		$filename=~s#\x00(\d+)\x00#chr($1)#ge;
 		$filename= eval {Encode::decode($enc,$filename)};
 	}
-	my ($enc)= $self->{ebuffer}=~m#^  Content-Encoding:\s*(.*)#mg;
-	if ($enc)
-	{	if ($enc eq 'gzip' && $gzip_ok)
-		{	my $gzipped= $self->{content};
-			IO::Uncompress::Gunzip::gunzip( \$gzipped, \$self->{content} )
-				or do {warn "simple_http_wget : gunzip failed: $IO::Uncompress::Gunzip::GunzipError\n"; $result='gunzip error';};
-		}
-		else
-		{	warn "simple_http_wget : can't decode '$enc' encoding\n";
-			$result='encoded';
-		}
-	}
 
 	if ($result=~m#^HTTP/1\.\d+ 200 OK#)
 	{	my $response=\$self->{content};
-		if ($self->{params}{cache} && defined $$response)
-		{	GMB::Cache::add($url,{data=>$response,type=>$type,size=>length($$response),filename=>$filename});
-		}
 		$callback->($$response,type=>$type,url=>$self->{params}{url},filename=>$filename);
 	}
 	else
@@ -130,30 +136,6 @@ sub receiving_cb
 		$callback->(undef,error=>$result);
 	}
 	return $self->{watch}=0;
-}
-
-sub progress
-{	my $self=shift;
-	my $length;
-	$length=$1 while $self->{ebuffer}=~m/Content-Length:\s*(\d+)/ig;
-	my $size= length $self->{content};
-	my $progress;
-	if ($length && $size)
-	{	$progress= $size/$length;
-		$progress=undef if $progress>1;
-	}
-	# $progress is undef or between 0 and 1
-	return $progress,$size;
-}
-
-sub abort
-{	my $self=$_[0];
-	Glib::Source->remove($self->{watch}) if $self->{watch};
-	Glib::Source->remove($self->{ewatch}) if $self->{ewatch};
-	kill INT=>$self->{pid} if $self->{pid};
-	close $self->{content_fh} if defined $self->{content_fh};
-	close $self->{error_fh} if defined $self->{error_fh};
-	$self->{pid}=$self->{content_fh}=$self->{error_fh}=$self->{watch}=$self->{ewatch}=undef;
 }
 
 1;

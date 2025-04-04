@@ -28,7 +28,7 @@ our $ignore_current_song;
 
 my $self=bless {},__PACKAGE__;
 my @ToSubmit; my @NowPlaying; my $NowPlayingID;
-my $interval=10; my ($timeout,$waiting);
+my $interval=10; my ($timeout);
 my ($Stop);
 my $Log= Gtk3::ListStore->new('Glib::String');
 
@@ -43,9 +43,8 @@ sub Start
 sub Stop
 {	
 	@NowPlaying=undef;
-	$waiting->abort if $waiting;
 	Glib::Source->remove($timeout) if $timeout;
-	$timeout=$waiting=undef;
+	$timeout=undef;
 	::UnWatch($self,$_) for qw/PlayingSong Played/;
 	$self->{on}=undef;
 	$interval=10;
@@ -76,20 +75,7 @@ sub prefbox
 	$qbox->{label}=$queue;
 	$qbox->{button}=$sendnow;
 	$qbox->show_all;
-	update_queue_label($qbox);
-	$qbox->set_no_show_all(1);
-	::Watch($qbox,Listenbrainz_state_change=>\&update_queue_label);
 	return $vbox;
-}
-sub update_queue_label
-{	my $qbox=shift;
-	my $label= $qbox->{label};
-	if (@ToSubmit && (!$waiting && (!$timeout || $interval>10)))
-	{	$label->set_text(::__n("song waiting to be sent"));
-		$label->get_parent->show;
-		$qbox->{button}->set_sensitive(!$waiting);
-	}
-	else { $label->get_parent->hide }
 }
 
 sub SongChanged
@@ -145,11 +131,9 @@ sub Submit
 		listen_type => $listen_type,
 		payload => [
 			{
-				#listened_at => $listened_at,
 				track_metadata => {
 					artist_name => $payload[0],
 					track_name => $payload[1]
-					#release_name => $payload[2]
 				}
 			}
 		]
@@ -158,41 +142,30 @@ sub Submit
 	$post->{payload}[0]->{track_metadata}->{release_name} = $payload[2] if $payload[2];
 	my $response_cb=sub
 	{	
-		my ($response,@lines)=@_;
-		my $error;
-		if	(!defined $response) {$error=_"connection failed";}
-		elsif	($response eq '{"status":"ok"}')
-		{	unlink $::HomeDir.SAVEFILE;
-			if (@ToSubmit) { 
-				Log( _("Submit OK ") .
-					::__x( _"{song} by {artist}", song=> $payload[1], artist => $payload[0]) );
-				undef @ToSubmit;
-				undef $waiting;
-				$interval=10;
-				return
-			};
-			if (@NowPlaying) {
-				Log( _("NowPlaying OK ") .
-					::__x( _"{song} by {artist}", song=> $payload[1], artist => $payload[0]) );
-				$interval=60;
-				undef $waiting;
-				return
-			};
-		}
-		elsif	($response eq 'BADSESSION')
-		{	$error=_"Bad session";
-		}
-		elsif	($response=~m/^FAILED (.*)$/)
-		{	$error=$1;
-		}
-		else	{$error=_"unknown error";}
+		my ($response,$error)=@_;
 
-		if (defined $error)
+		if ($error)
 		{	Log(_("Submit failed : ").$error);
 			Log(_("Response : ").$response) if $response;
 			$interval*=2;
 			$interval=max($interval, 300);
+			return;
 		}
+
+		unlink $::HomeDir.SAVEFILE;
+		if (@ToSubmit) { 
+			Log( _("Submit OK ") .
+				::__x( _"{song} by {artist}", song=> $payload[1], artist => $payload[0]) );
+			undef @ToSubmit;
+			$interval=10;
+			return
+		};
+		if (@NowPlaying) {
+			Log( _("NowPlaying OK ") .
+				::__x( _"{song} by {artist}", song=> $payload[1], artist => $payload[0]) );
+			$interval=60;
+			return
+		};
 	};
 
 	my $authtoken=$::Options{OPT.'TOKEN'};
@@ -209,14 +182,14 @@ sub SendNow
 sub Sleep
 {	return unless $self->{on};
 	::QHasChanged('Listenbrainz_state_change');
-	return if $Stop || $waiting || $timeout;
+	return if $Stop || $timeout;
 	$timeout=Glib::Timeout->add(1000*$interval,\&Awake) if @ToSubmit || @NowPlaying;
 }
 
 sub Awake
 {	Glib::Source->remove($timeout) if $timeout;
 	$timeout=undef;
-	return 0 if !$self->{on} || $waiting;
+	return 0 if !$self->{on};
 	Submit();
 	Sleep();
 	return 0;
@@ -226,12 +199,11 @@ sub Send
 {	my ($response_cb,$url,$post,$authtoken)=@_;
 	my $cb=sub
 	{	my @response=(defined $_[0])? split "\012",$_[0] : ();
-		$waiting=undef;
 		&$response_cb(@response);
 		Sleep();
 	};
 
-	$waiting=Simple_http::get_with_cb(cb => $cb,url => $url,post => $post,authtoken => $authtoken);
+	Simple_http::post_with_cb(cb => $cb,url => $url,post => $post,authtoken => $authtoken);
 	::QHasChanged('Listenbrainz_state_change');
 }
 
