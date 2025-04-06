@@ -513,14 +513,8 @@ sub loaded
 	unless ($data) { $data=_("Loading failed.").qq( <a href="$self->{url}">)._("retry").'</a>'; $type="text/html"; }
 	$self->{url}=$prop{url} if $prop{url}; #for redirections
 	$buffer->delete($buffer->get_bounds);
-	my $encoding;
-	if ($type && $type=~m#^text/.*; ?charset=([\w-]+)#) {$encoding=$1}
-	if ($data=~m/xml version/) { $encoding='utf-8'; }
-	$encoding=$1 if $data=~m#<meta *http-equiv="Content-Type" *content="text/html; charset=([\w-]+)"#;
-	$encoding='cp1252' if $encoding && $encoding eq 'iso-8859-1'; #microsoft use the superset cp1252 of iso-8859-1 but says it's iso-8859-1
-	$encoding||='cp1252'; #default encoding
-	#$data=Encode::decode($encoding,$data) if $encoding;
-	if ($encoding eq 'utf-8') { $data = ::decode_html($data); }
+
+	$data = ::decode_html($data);
 	my $iter=$buffer->get_start_iter;
 
 	my $fontsize = $self->{fontsize};

@@ -411,11 +411,8 @@ sub loaded #_very_ crude html to gtktextview renderer
 {	my ($self,$data,%data_prop)=@_;
 	my $type=$data_prop{type};
 	my $buffer=$self->{buffer};
-	my $encoding;
-	unless ($data) { $data=_("Loading failed.").qq( <a href="$self->{url}">)._("retry").'</a>'; $type="text/html"; $encoding=0; }
 	$self->{url}=$data_prop{url} if $data_prop{url}; #for redirections
 	$buffer->delete($buffer->get_bounds);
-	if ($type && $type=~m#^text/.*; ?charset=([\w-]+)#) {$encoding=$1}
 	if ($type && $type!~m#^text/html#)
 	{	if	($type=~m#^text/#)	{$buffer->set_text($data);}
 		elsif	($type=~m#^image/#)
@@ -424,11 +421,6 @@ sub loaded #_very_ crude html to gtktextview renderer
 		}
 		return;
 	}
-	$encoding=$1 if $data=~m#<meta *http-equiv="Content-Type" *content="text/html; charset=([\w-]+)"#;
-	$encoding='cp1252' if $encoding && $encoding eq 'iso-8859-1'; #microsoft use the superset cp1252 of iso-8859-1 but says it's iso-8859-1
-	$encoding//='cp1252'; #default encoding
-
-	#$data=Encode::decode($encoding,$data) if $encoding;
 
 	my $oklyrics;
 	if (my $check=$self->{check})
