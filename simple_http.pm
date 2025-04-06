@@ -41,8 +41,8 @@ sub post_with_cb
 		$callback->($result, error=>undef);
 	}
 	else {
-		warn "Error fetching $url : $result\n";
-		warn $response->status_line;
+		warn "Error fetching " . $url . " : " . $response->status_line . "\n";
+		#warn "$result\n";
 		$callback->($response->status_line, error=>$result);
 	}
 }
@@ -65,8 +65,8 @@ sub get_with_cb
 		$callback->($result, error=>undef);
 	}
 	else {
-		warn "Error fetching $url : $result\n";
-		warn $response->status_line;
+		warn "Error fetching " . $url . " : " . $response->status_line . "\n";
+		#warn "$result\n";
 		$callback->($response->status_line, error=>$result);
 	}
 }

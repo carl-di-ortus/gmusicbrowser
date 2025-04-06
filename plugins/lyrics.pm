@@ -19,6 +19,7 @@ require 'simple_http.pm';
 our @ISA;
 BEGIN {push @ISA,'GMB::Context';}
 use base 'Gtk3::Box';
+use Text::Autoformat;
 use constant
 {	OPT	=> 'PLUGIN_LYRICS_', # MUST begin by PLUGIN_ followed by the plugin ID / package name
 };
@@ -48,54 +49,33 @@ my @ContextMenuAppend=
 	},
 );
 
-my %Sites=	# id => [name,url,?post?,function]	if the function return 1 => lyrics can be saved
-(	#lyrc	=>	['lyrc','http://lyrc.com.ar/en/tema1en.php','artist=%a&songname=%t'],
-	#lyrc	=>	['lyrc','http://lyrc.com.ar/en/tema1en.php?artist=%a&songname=%t',undef,sub
-	#	{	local $_=$_[0];
-	#		return -1 if m#<a href=[^>]+add[^>]+>(?:[^<]*</?[b-z]\w*)*[^<]*Add a lyric.(?:[^<]*</?[b-z]\w*)*[^<]*</a>#i;
-	#		return 1 if s#<a href="\#"[^>]+badsong[^>]+>BADSONG</a>##i;
-	#		return 0;
-	#	}],
-	#leoslyrics =>	['leolyrics','http://api.leoslyrics.com/api_search.php?artist=%a&songtitle=%t'],
-	#google	=>	['google','http://www.google.com/search?q="%a"+"%t"'],
-	lyriki	=>	['lyriki','http://lyriki.com/index.php?title=%a:%t',undef,
-		sub { my $no= $_[0]=~m/<div class="noarticletext">/s; $_[0]=~s/^.*<!--\s*start content\s*-->(.*?)<!--\s*end content\s*-->.*$/$1/s && !$no; }],
-	#lyricsplugin => [lyricsplugin => 'http://www.lyricsplugin.com/winamp03/plugin/?title=%t&artist=%a',undef,
-	#		sub { my $ok=$_[0]=~m#<div id="lyrics">.*\w\n.*\w.*</div>#s; $_[0]=~s/<div id="admin".*$//s if $ok; return $ok; }],
-#	lyricssongs =>	['lyrics-songs',sub {  ::ReplaceFields($_[0], "http://letras.terra.com.br/winamp.php?musica=%t&artista=%a", sub {::url_escapeall(::superlc($_[0]));})  },undef,
-#			sub {	my $is_suggestion= $_[0]=~m#<h3>Provável música</h3>#i;
-#				my $l=html_extract($_[0],div=>'letra');
-#				$l=~s#<div id="cabecalho">.*?</div>##s if $l; #remove header with title and artist links
-#				my $ref=\$_[0];
-#				$$ref= $l ? $l : $notfound;
-#				return $l && !$is_suggestion;
-#			}],
-#	lyricwiki =>	[lyricwiki => 'http://lyrics.wikia.com/%a:%t',undef,
-#			 sub {	return 0,'http://lyrics.wikia.com/'.$1 if $_[0]=~m#<span class="redirectText"><a href="/([^"]+)"#;
-#				$_[0]=~s!.*<div class='lyricbox'>.*?((?:&\#\d+;|<br ?/>|</?[bi]>){5,}).*!$1!s; #keep only the "lyric box"
-#				return 0 if $_[0]=~m!&#91;&#46;&#46;&#46;&#93;(?:<br ?/>)*<i>!; # truncated lyrics : "[...]" followed by italic explanation => not auto-saved
-#				return !!$1;
-#			}],
-	musixmatch =>   [musixmatch => sub {  ::ReplaceFields($_[0], "http://www.musixmatch.com/lyrics/%a/%t", sub { my $s=::url_escapeall($_[0]); $s=~s/%20/-/g; $s }) }, undef,
-                         sub
-			 {  $_[0] =~ s/[\r\n]/<br>/g;
+my %Sites=	# id => [name,url,?,function]	if the function return 1 => lyrics can be saved
+(	# http://lyrc.com.ar/en/tema1en.php
+	# http://lyrc.com.ar/en/tema1en.php?artist=%a&songname=%t
+	# http://api.leoslyrics.com/api_search.php?artist=%a&songtitle=%t
+	# http://www.google.com/search?q="%a"+"%t"
+	lyriki	=>	[
+		lyriki => sub {  ::ReplaceFields($_[0], "https://lyriki.com/%a:%t",
+	 sub { my $s=::url_escapeall($_[0]); $s = autoformat($s, { case => "title" }); $s=~s/%20/_/g; $s=~s/\n//g; $s }) },
+	 	#'https://lyriki.com/%a:%t',
+		undef,
+		sub { my $no= $_[0]=~m/<div class="noarticletext">/s;
+		 $_[0]=~s/^.*<!--\s*start content\s*-->(.*?)<!--\s*end content\s*-->.*$/$1/s && !$no; }],
+	# http://www.lyricsplugin.com/winamp03/plugin/?title=%t&artist=%a
+	# http://letras.terra.com.br/winamp.php?musica=%t&artista=%a
+	# http://lyrics.wikia.com/%a:%t
+	musixmatch => [
+		musixmatch => sub {  ::ReplaceFields($_[0], "https://www.musixmatch.com/lyrics/%a/%t", sub { my $s=::url_escapeall($_[0]); $s=~s/%20/-/g; $s }) },
+		undef,
+		sub
+			{  $_[0] =~ s/[\r\n]/<br>/g;
 			    my $l="";
 			    $l=join "<br>", ($_[0] =~ m/<span class="lyrics__content__\w+">(.+?)<\/span>/g);
-			    if ($l)
-			    {	$_[0]=$l;
-				return 1;
-			    }
-			    else
-			    {	# FIXME try searching with "http://www.musixmatch.com/search/%a %t" and take best result ?
-				# FIXME or try searching again after cleaning title and artist for things like "(live)" ?
-			        $_[0] = $notfound;
-				return 0;
-			    }
-			 }],
-       #lyricwikiapi => [lyricwiki => 'http://lyricwiki.org/api.php?artist=%a&song=%t&fmt=html',undef,
-	#	sub { $_[0]!~m#<pre>\W*Not found\W*</pre>#s }],
-	#azlyrics => [ azlyrics => 'http://search.azlyrics.com/cgi-bin/azseek.cgi?q="%a"+"%t"'],
-	#Lyricsfly ?
+			    if ($l) { $_[0]=$l; return 1; }
+			    else { $_[0] = $notfound; return 0; }
+			}],
+	# http://lyricwiki.org/api.php?artist=%a&song=%t&fmt=html
+	# http://search.azlyrics.com/cgi-bin/azseek.cgi?q="%a"+"%t"
 	AUTO	=> [_"Auto",],	#special mode that search multiple sources
 );
 
@@ -346,15 +326,15 @@ sub load_from_web
 		}
 	}
 	return unless $site;
-	my (undef,$url,$post,$check)=@{$Sites{$site}};
+	my (undef,$url,$check)=@{$Sites{$site}};
 	my $ID= $self->{ID};
-	for my $val ($url,$post)
+	for my $val ($url)
 	{	next unless defined $val;
 		if (ref $val) { $val= $val->($ID); }
 		else { $val= ::ReplaceFields($ID, $val, \&::url_escapeall); }
 	}
 	return unless $url;
-	::IdleDo('8_lyrics'.$self,1000,\&load_url,$self,$url,$post,$check);
+	::IdleDo('8_lyrics'.$self,1000,\&load_url,$self,$url,$check);
 }
 
 sub TimeChanged		#scroll the text
@@ -418,14 +398,13 @@ sub html_extract
 }
 
 sub load_url
-{	my ($self,$url,$post,$check)=@_;
+{	my ($self,$url,$check)=@_;
 	$self->Set_message(_"Loading...");
 	$self->cancel;
-	warn "lyrics : loading $url\n";# if $::debug;
+	warn "lyrics : loading $url\n";
 	$self->{url}=$url;
-	$self->{post}=$post;
 	$self->{check}=$check; # function to check if lyrics found
-	Simple_http::post_with_cb(cb => sub {$self->loaded(@_)},url => $url,post => $post);
+	Simple_http::get_with_cb(cb => sub {$self->loaded(@_)},url => $url);
 }
 
 sub loaded #_very_ crude html to gtktextview renderer
@@ -448,7 +427,8 @@ sub loaded #_very_ crude html to gtktextview renderer
 	$encoding=$1 if $data=~m#<meta *http-equiv="Content-Type" *content="text/html; charset=([\w-]+)"#;
 	$encoding='cp1252' if $encoding && $encoding eq 'iso-8859-1'; #microsoft use the superset cp1252 of iso-8859-1 but says it's iso-8859-1
 	$encoding//='cp1252'; #default encoding
-	$data=Encode::decode($encoding,$data) if $encoding;
+
+	#$data=Encode::decode($encoding,$data) if $encoding;
 
 	my $oklyrics;
 	if (my $check=$self->{check})

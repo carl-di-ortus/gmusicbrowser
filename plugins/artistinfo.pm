@@ -29,7 +29,7 @@ use constant
 my %sites =
 (
 	biography => ['http://ws.audioscrobbler.com/2.0/?method=artist.getinfo&artist=%a&api_key=7aa688c2466dc17263847da16f297835&autocorrect=1',_"Biography",_"Show artist's biography"],
-	events => ['http://ws.audioscrobbler.com/2.0/?method=artist.getevents&artist=%a&api_key=7aa688c2466dc17263847da16f297835&autocorrect=1',_"Events",_"Show artist's upcoming events"],
+	#events => ['http://ws.audioscrobbler.com/2.0/?method=artist.getevents&artist=%a&api_key=7aa688c2466dc17263847da16f297835&autocorrect=1',_"Events",_"Show artist's upcoming events"],
 	similar => ['http://ws.audioscrobbler.com/2.0/?method=artist.getsimilar&artist=%a&api_key=7aa688c2466dc17263847da16f297835&autocorrect=1&limit=%l',_"Similar",_"Show similar artists"]);
 
 my @External=
@@ -519,7 +519,7 @@ sub loaded
 	$encoding=$1 if $data=~m#<meta *http-equiv="Content-Type" *content="text/html; charset=([\w-]+)"#;
 	$encoding='cp1252' if $encoding && $encoding eq 'iso-8859-1'; #microsoft use the superset cp1252 of iso-8859-1 but says it's iso-8859-1
 	$encoding||='cp1252'; #default encoding
-	$data=Encode::decode($encoding,$data) if $encoding;
+	#$data=Encode::decode($encoding,$data) if $encoding;
 	if ($encoding eq 'utf-8') { $data = ::decode_html($data); }
 	my $iter=$buffer->get_start_iter;
 
