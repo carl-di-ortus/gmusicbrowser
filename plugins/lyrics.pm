@@ -20,6 +20,7 @@ our @ISA;
 BEGIN {push @ISA,'GMB::Context';}
 use base 'Gtk3::Box';
 use Text::Autoformat;
+use HTML::TreeBuilder;
 use constant
 {	OPT	=> 'PLUGIN_LYRICS_', # MUST begin by PLUGIN_ followed by the plugin ID / package name
 };
@@ -58,7 +59,6 @@ my %Sites=	# id => [name,url,?,function]	if the function return 1 => lyrics can 
 		lyriki => sub {  ::ReplaceFields($_[0], "https://lyriki.com/%a:%t",
 	 sub { my $s=::url_escapeall($_[0]); $s = autoformat($s, { case => "title" }); $s=~s/%20/_/g; $s=~s/\n//g; $s }) },
 	 	#'https://lyriki.com/%a:%t',
-		undef,
 		sub { my $no= $_[0]=~m/<div class="noarticletext">/s;
 		 $_[0]=~s/^.*<!--\s*start content\s*-->(.*?)<!--\s*end content\s*-->.*$/$1/s && !$no; }],
 	# http://www.lyricsplugin.com/winamp03/plugin/?title=%t&artist=%a
@@ -66,11 +66,15 @@ my %Sites=	# id => [name,url,?,function]	if the function return 1 => lyrics can 
 	# http://lyrics.wikia.com/%a:%t
 	musixmatch => [
 		musixmatch => sub {  ::ReplaceFields($_[0], "https://www.musixmatch.com/lyrics/%a/%t", sub { my $s=::url_escapeall($_[0]); $s=~s/%20/-/g; $s }) },
-		undef,
 		sub
-			{  $_[0] =~ s/[\r\n]/<br>/g;
-			    my $l="";
-			    $l=join "<br>", ($_[0] =~ m/<span class="lyrics__content__\w+">(.+?)<\/span>/g);
+			{
+				my $dom_tree = HTML::TreeBuilder->new_from_content($_[0]);
+				my @content = $dom_tree->look_down(_tag => "h2");
+				my $start_content = @content[2];
+				warn $start_content;
+				my $parent = $start_content->parent();
+				#$start_content.delete();
+				my $l = $parent->as_HTML;
 			    if ($l) { $_[0]=$l; return 1; }
 			    else { $_[0] = $notfound; return 0; }
 			}],
