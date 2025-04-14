@@ -14,7 +14,7 @@ desc	Search and display lyrics
 package GMB::Plugin::LYRICS;
 use strict;
 use warnings;
-use utf8;
+use utf8::all;
 require 'simple_http.pm';
 our @ISA;
 BEGIN {push @ISA,'GMB::Context';}
@@ -68,15 +68,20 @@ my %Sites=	# id => [name,url,?,function]	if the function return 1 => lyrics can 
 		musixmatch => sub {  ::ReplaceFields($_[0], "https://www.musixmatch.com/lyrics/%a/%t", sub { my $s=::url_escapeall($_[0]); $s=~s/%20/-/g; $s }) },
 		sub
 			{
-				my $dom_tree = HTML::TreeBuilder->new_from_content($_[0]);
-				my @content = $dom_tree->look_down(_tag => "h2");
-				my $start_content = @content[2];
-				warn $start_content;
-				my $parent = $start_content->parent();
-				#$start_content.delete();
-				my $l = $parent->as_HTML;
-			    if ($l) { $_[0]=$l; return 1; }
-			    else { $_[0] = $notfound; return 0; }
+				if (!$_[0]) {
+					$_[0] = $notfound; return 0;
+				}
+				eval {
+					my $dom_tree = HTML::TreeBuilder->new_from_content($_[0]);
+					my @content = $dom_tree->look_down(_tag => "h2");
+					my $start_content = @content[2];
+					my $parent = $start_content->parent();
+					my $l = $parent->as_HTML;
+			    	$_[0]=$l; return 1;
+				}
+				or do {
+					$_[0] = $notfound; return 0;
+				}
 			}],
 	# http://lyricwiki.org/api.php?artist=%a&song=%t&fmt=html
 	# http://search.azlyrics.com/cgi-bin/azseek.cgi?q="%a"+"%t"
@@ -662,7 +667,6 @@ sub load_from_file
 		FileTag::GetLyrics($ID) || _load_from_lyrics_file($ID) :
 		_load_from_lyrics_file($ID) || FileTag::GetLyrics($ID) ;
 
-	# if no lyrics found, try the web
 	unless ($text)
 	{	$self->load_from_web;
 		return

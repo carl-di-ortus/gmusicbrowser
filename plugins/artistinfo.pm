@@ -18,7 +18,7 @@ url	http://gmusicbrowser.org/dokuwiki/doku.php?id=plugins:artistinfo
 package GMB::Plugin::ARTISTINFO;
 use strict;
 use warnings;
-use utf8;
+use utf8::all;
 require 'simple_http.pm';
 use base 'Gtk3::Box';
 use constant

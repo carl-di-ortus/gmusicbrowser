@@ -19,7 +19,7 @@ BEGIN
 }
 use strict;
 use warnings;
-use utf8;
+use utf8::all;
 
 package FileTag;
 

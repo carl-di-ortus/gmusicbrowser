@@ -16,7 +16,7 @@ req	gir(WebKit2-4.0, gir1.2-webkit2-4.0 webkit2gtk3)
 
 use strict;
 use warnings;
-use utf8;
+use utf8::all;
 
 Glib::Object::Introspection->setup(basename => 'WebKit2', version => '4.0', package => 'WebKit2');
 push @GMB::Plugin::WebContext::ISA, 'GMB::Plugin::WebContext::WebKit';

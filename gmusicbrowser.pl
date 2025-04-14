@@ -17,9 +17,7 @@
 
 use strict;
 use warnings;
-use utf8;
-binmode STDERR,':utf8';
-binmode STDOUT,':utf8';
+use utf8::all;
 
 
 package main;

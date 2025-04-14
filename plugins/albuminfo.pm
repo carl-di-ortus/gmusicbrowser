@@ -20,7 +20,7 @@ desc	Retrieves album-relevant information (review etc.) from allmusic.com.
 package GMB::Plugin::ALBUMINFO;
 use strict;
 use warnings;
-use utf8;
+use utf8::all;
 require 'simple_http.pm';
 use base 'Gtk3::Box';
 use constant
