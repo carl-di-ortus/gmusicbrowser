@@ -77,6 +77,11 @@ my %Sites=	# id => [name,url,?,function]	if the function return 1 => lyrics can 
 					my $start_content = @content[2];
 					my $parent = $start_content->parent();
 					my $l = $parent->as_HTML;
+					$l =~ s/<(\w+) [^>]*>/<$1>/g;
+					$l =~ s/(<div>)+/<div>/g;
+					$l =~ s/(<\/div>)+/<\/div>/g;
+					$l =~ s/<div><\/div>//g;
+					$l =~ s/<div><a>.*//g;
 			    	$_[0]=$l; return 1;
 				}
 				or do {
