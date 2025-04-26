@@ -82,6 +82,8 @@ my %Sites=	# id => [name,url,?,function]	if the function return 1 => lyrics can 
 					$l =~ s/(<\/div>)+/<\/div>/g;
 					$l =~ s/<div><\/div>//g;
 					$l =~ s/<div><a>.*//g;
+					$l =~ s/(<h3>)/<br\/>$1/g;
+					warn $l;
 			    	$_[0]=$l; return 1;
 				}
 				or do {
