@@ -26,6 +26,7 @@ use constant
 };
 
 my $notfound=_"No lyrics found";
+my $instrumental=_"Instrumental";
 
 my @justification=
 (	left	=> _"Left aligned",
@@ -77,14 +78,17 @@ my %Sites=	# id => [name,url,?,function]	if the function return 1 => lyrics can 
 					my $start_content = @content[2];
 					my $parent = $start_content->parent();
 					my $l = $parent->as_HTML;
+					if (index($l, "Still no lyrics here. Be the first to add them.") != -1) {
+						$_[0] = $notfound; return 0;
+					}
 					$l =~ s/<(\w+) [^>]*>/<$1>/g;
 					$l =~ s/(<div>)+/<div>/g;
 					$l =~ s/(<\/div>)+/<\/div>/g;
 					$l =~ s/<div><\/div>//g;
 					$l =~ s/<div><a>.*//g;
 					$l =~ s/(<h3>)/<br\/>$1/g;
-					warn $l;
-			    	$_[0]=$l; return 1;
+					#warn $l;
+			    	$_[0] = $l; return 1;
 				}
 				or do {
 					$_[0] = $notfound; return 0;
@@ -451,6 +455,11 @@ sub loaded #_very_ crude html to gtktextview renderer
 		$self->{backb}->set_sensitive(1) if @$history==1;
 	}
 	$self->{lastokurl}=$self->{url};
+
+	if (index($data, "This music is instrumental. Let the music play") != -1) {
+		warn "found instrumental";
+		$self->Set_message($instrumental); return;
+	}
 
 	for ($data)
 	{s/<!--.*?-->//gs;
