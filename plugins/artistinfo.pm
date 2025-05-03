@@ -18,8 +18,8 @@ url	http://gmusicbrowser.org/dokuwiki/doku.php?id=plugins:artistinfo
 package GMB::Plugin::ARTISTINFO;
 use strict;
 use warnings;
-use utf8;
-require $::HTTP_module;
+use utf8::all;
+require 'simple_http.pm';
 use base 'Gtk3::Box';
 use constant
 {	OPT	=> 'PLUGIN_ARTISTINFO_', # MUST begin by PLUGIN_ followed by the plugin ID / package name
@@ -29,7 +29,7 @@ use constant
 my %sites =
 (
 	biography => ['http://ws.audioscrobbler.com/2.0/?method=artist.getinfo&artist=%a&api_key=7aa688c2466dc17263847da16f297835&autocorrect=1',_"Biography",_"Show artist's biography"],
-	events => ['http://ws.audioscrobbler.com/2.0/?method=artist.getevents&artist=%a&api_key=7aa688c2466dc17263847da16f297835&autocorrect=1',_"Events",_"Show artist's upcoming events"],
+	#events => ['http://ws.audioscrobbler.com/2.0/?method=artist.getevents&artist=%a&api_key=7aa688c2466dc17263847da16f297835&autocorrect=1',_"Events",_"Show artist's upcoming events"],
 	similar => ['http://ws.audioscrobbler.com/2.0/?method=artist.getsimilar&artist=%a&api_key=7aa688c2466dc17263847da16f297835&autocorrect=1&limit=%l',_"Similar",_"Show similar artists"]);
 
 my @External=
@@ -49,7 +49,6 @@ my %menuitem=
 	test => sub {$_[0]{mainfield} eq 'artist'},	#the menu item is displayed if returns true
 );
 my $nowplayingaID;
-my $queuewaiting;
 my %queuemode=
 (	order=>10, icon=>'gtk-refresh',	short=> _"similar-artists",		long=> _"Auto-fill queue with similar artists (from last.fm)",	changed=>\&QAutofillSimilarArtists,	keep=>1,save=>1,autofill=>1,
 );
@@ -97,7 +96,6 @@ sub Stop {
 	Layout::RegisterWidget(PluginArtistinfo => undef);
 	@::cMenuAA=  grep $_!=\%menuitem, @::SongCMenu;
 	delete $::QActions{'autofill-similar-artists'}; ::Update_QueueActionList();
-	$queuewaiting->abort if $queuewaiting; $queuewaiting=undef;
 }
 
 sub new
@@ -271,7 +269,6 @@ sub destroy_event_cb
 sub cancel
 {	my $self=shift;
 	delete $::ToDo{'8_artistinfo'.$self};
-	$self->{waiting}->abort if $self->{waiting};
 }
 
 sub prefbox
@@ -506,25 +503,18 @@ sub load_url
 	warn "info : loading $url\n" if $::debug;
 	$self->{url}=$url;
 	$self->{sw2}->hide; $self->{sw1}->show;
-	$self->{waiting}=Simple_http::get_with_cb(cb => sub {$self->loaded(@_)},url => $url, cache => 1);
+	Simple_http::get_with_cb(cb => sub {$self->loaded(@_)},url => $url);
 }
 
 sub loaded
 {	my ($self,$data,%prop)=@_;
-	delete $self->{waiting};
 	my $buffer=$self->{buffer};
 	my $type=$prop{type};
 	unless ($data) { $data=_("Loading failed.").qq( <a href="$self->{url}">)._("retry").'</a>'; $type="text/html"; }
 	$self->{url}=$prop{url} if $prop{url}; #for redirections
 	$buffer->delete($buffer->get_bounds);
-	my $encoding;
-	if ($type && $type=~m#^text/.*; ?charset=([\w-]+)#) {$encoding=$1}
-	if ($data=~m/xml version/) { $encoding='utf-8'; }
-	$encoding=$1 if $data=~m#<meta *http-equiv="Content-Type" *content="text/html; charset=([\w-]+)"#;
-	$encoding='cp1252' if $encoding && $encoding eq 'iso-8859-1'; #microsoft use the superset cp1252 of iso-8859-1 but says it's iso-8859-1
-	$encoding||='cp1252'; #default encoding
-	$data=Encode::decode($encoding,$data) if $encoding;
-	if ($encoding eq 'utf-8') { $data = ::decode_html($data); }
+
+	$data = ::decode_html($data);
 	my $iter=$buffer->get_start_iter;
 
 	my $fontsize = $self->{fontsize};
@@ -669,7 +659,7 @@ sub Save_text
 }
 
 sub QAutofillSimilarArtists
-{	$queuewaiting->abort if $queuewaiting; $queuewaiting=undef;
+{	
 	return unless $::QueueAction eq 'autofill-similar-artists';
 	return if $::Options{MaxAutoFill}<=@$::Queue;
 	return unless $::SongID;
@@ -679,11 +669,11 @@ sub QAutofillSimilarArtists
 
 	my $url = GetUrl($sites{similar}[0],$nowplayingaID);
 	return unless $url;
-	$queuewaiting=Simple_http::get_with_cb(url => $url, cb => \&PopulateQueue );
+	Simple_http::get_with_cb(url => $url, cb => \&PopulateQueue );
 }
 
 sub PopulateQueue
-{	$queuewaiting=undef;
+{
 	if ( $nowplayingaID != Songs::Get_gid($::SongID,'artist')) { QAutofillSimilarArtists; return; }
 	my $data = $_[0];
 

@@ -17,9 +17,7 @@
 
 use strict;
 use warnings;
-use utf8;
-binmode STDERR,':utf8';
-binmode STDOUT,':utf8';
+use utf8::all;
 
 
 package main;
@@ -528,18 +526,13 @@ Options to change what is done with files/folders passed as arguments (done in r
 }
 # end of command line handling
 
-our $HTTP_module;
 our ($Play_package,%PlayPacks); my ($PlayNext_package,$Vol_package);
 BEGIN{
 require 'gmusicbrowser_songs.pm';
 require 'gmusicbrowser_tags.pm';
 require 'gmusicbrowser_layout.pm';
 require 'gmusicbrowser_list.pm';
-$HTTP_module=	-e $DATADIR.SLASH.'simple_http_wget.pm' && (grep -x $_.SLASH.'wget', split /:/, $ENV{PATH})	? 'simple_http_wget.pm' :
-		-e $DATADIR.SLASH.'simple_http_AE.pm'   && (grep -f $_.SLASH.'AnyEvent'.SLASH.'HTTP.pm', @INC)	? 'simple_http_AE.pm' :
-		'simple_http.pm';
-#warn "using $HTTP_module for http requests\n";
-#require $HTTP_module;
+require 'simple_http.pm';
 
  # load gstreamer backend module
  if (!$CmdLine{nogst})
@@ -10306,22 +10299,16 @@ sub Start
 		$self->Done;
 	}
 	else
-	{	unless (eval {require $::HTTP_module}) {warn "Loading $::HTTP_module failed, can't download $display_uri\n"; $self->Done; return}
+	{	
 		warn "Downloading '$display_uri' to '$destpath'\n" if $::debug;
 		::Progress( $progressid, bartext_append=>$display_uri, title=>_"Downloading");
-		$self->{waiting}= Simple_http::get_with_cb(url => $uri, cache=>1, progress=>1, cb => sub { $self->Downloaded(@_); });
-		$self->{track_progress} ||= Glib::Timeout->add(200,
-		 sub {	if (my $w= $self->{waiting}) { my ($p,$s)=$w->progress; ::Progress( $progressid, partial=>$p ) if defined $p; }
-			else { $self->{track_progress}=0 }
-			return $self->{track_progress};
-		     });
+		Simple_http::get_with_cb(url => $uri, cb => sub { $self->Downloaded(@_); });
 		return
 	}
 }
 
 sub Downloaded
 {	my ($self,$content,%content_prop)=@_;
-	delete $self->{waiting};
 	my $type=$content_prop{type};
 	my $params= $self->{current};
 	my $uri= $params->{uri};
@@ -10409,7 +10396,6 @@ sub Done # file done, if no $self->{newfile} it means the file has been skipped
 }
 sub Abort	# GMB::DropURI object must not be used after that
 {	my $self=shift;
-	$self->{waiting}->abort if $self->{waiting};
 	Glib::Source->remove( $self->{track_progress} ) if $self->{track_progress};
 	::Progress( 'DropURI_'.$self, abort=>1 );
 	$self->{cb_end}() if $self->{cb_end};
