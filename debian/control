@@ -7,7 +7,6 @@ Build-Depends: debhelper (>= 5.0.0), markdown
 Standards-Version: 3.7.3
 
 Package: gmusicbrowser
-Version: 1.1.99.2
 Architecture: all
 Depends: perl, libgtk3-perl, libgtk-3-0, libutf8-all-perl
 Recommends: libintl-perl, libnet-dbus-perl, libglib-object-introspection-perl, gir1.2-gstreamer-1.0, libdigest-crc-perl, libhtml-parser-perl, libio-compress-perl, libtext-autoformat-perl, libxml-perl

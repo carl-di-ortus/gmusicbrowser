@@ -34,7 +34,7 @@ po/gmusicbrowser.pot : gmusicbrowser.pl *.pm plugins/*.pm layouts/*.layout
 	perl po/create_pot.pl --quiet
 
 po/%.po : po/gmusicbrowser.pot
-	msgmerge -s -U -N $@ po/gmusicbrowser.pot
+	msgmerge -U -N $@ po/gmusicbrowser.pot
 
 locale/%/LC_MESSAGES/gmusicbrowser.mo : po/%.po po/gmusicbrowser.pot
 	mkdir -p locale/$*/LC_MESSAGES/

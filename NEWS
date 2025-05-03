@@ -1,3 +1,12 @@
+v1.1.99.3
+contains all fixes from original repository https://github.com/squentin/gmusicbrowser up till 1.1.99.1 release
+add Listenbrainz support.
+add VSCode support.
+removed changelog history (fixes dpkg-buildpackage warnings).
+removed 3 manual http handlers in favor of LWP.
+removed obsolete artist events page.
+fix lyrics plugin.
+
 v1.1.16
 (Most of these changes have been in git for a long time since I didn't make a release in all this time)
 fix not working with perl >=5.24 (remove 2 superfluous "my")

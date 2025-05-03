@@ -20,7 +20,7 @@ msginit, msgmerge and msgfmt can be found in the package gettext
   - create the gmusicbrowser.pot file :
 	./create_pot.pl
   - merge with existing translations :
-	msgmerge -s -U $LANGUAGE.po gmusicbrowser.pot
+	msgmerge -U $LANGUAGE.po gmusicbrowser.pot
     where $LANGUAGE is your language code
     add the -N option to prevent guesses (marked as fuzzy)
   - edit $LANGUAGE.po

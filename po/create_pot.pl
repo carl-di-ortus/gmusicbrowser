@@ -114,7 +114,7 @@ if ($verbose)
 	warn " ".($count_format[1]+$count_format[3])." with perl-format flag\n";
 	warn " ".($count_format[2]+$count_format[3])." with perl-format-brace flag\n";
 	warn "wrote $potfile\n";
-	warn "to update fr.po, run :  msgmerge -s -U fr.po gmusicbrowser.pot\n";
+	warn "to update fr.po, run :  msgmerge -U fr.po gmusicbrowser.pot\n";
 }
 exit 0;
 
