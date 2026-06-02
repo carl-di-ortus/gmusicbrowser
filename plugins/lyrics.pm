@@ -72,23 +72,11 @@ my %Sites=	# id => [name,url,?,function]	if the function return 1 => lyrics can 
 				if (!$_[0]) {
 					$_[0] = $notfound; return 0;
 				}
+				
 				eval {
-					my $dom_tree = HTML::TreeBuilder->new_from_content($_[0]);
-					my @content = $dom_tree->look_down(_tag => "h2");
-					my $start_content = @content[2];
-					my $parent = $start_content->parent();
-					my $l = $parent->as_HTML;
-					if (index($l, "Still no lyrics here. Be the first to add them.") != -1) {
-						$_[0] = $notfound; return 0;
-					}
-					$l =~ s/<(\w+) [^>]*>/<$1>/g;
-					$l =~ s/(<div>)+/<div>/g;
-					$l =~ s/(<\/div>)+/<\/div>/g;
-					$l =~ s/<div><\/div>//g;
-					$l =~ s/<div><a>.*//g;
-					$l =~ s/(<h3>)/<br\/>$1/g;
-					#warn $l;
-			    	$_[0] = $l; return 1;
+					$_[0] =~ s/.*\"lyrics\":{\"body\":\"((?:(?!\",\").)+).*/$1/s;
+					$_[0] =~ s/\\n/<br\/>/g;
+					return 1;
 				}
 				or do {
 					$_[0] = $notfound; return 0;
