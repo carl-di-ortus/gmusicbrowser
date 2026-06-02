@@ -74,7 +74,7 @@ my %Sites=	# id => [name,url,?,function]	if the function return 1 => lyrics can 
 				}
 				
 				eval {
-					$_[0] =~ s/.*\"lyrics\":{\"body\":\"((?:(?!\",\").)+).*/$1/s;
+					$_[0] =~ s/.*\"lyrics\":\{\"body\":\"((?:(?!\",\").)+).*/$1/s;
 					$_[0] =~ s/\\n/<br\/>/g;
 					return 1;
 				}
