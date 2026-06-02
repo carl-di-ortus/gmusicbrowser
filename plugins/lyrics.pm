@@ -69,18 +69,13 @@ my %Sites=	# id => [name,url,?,function]	if the function return 1 => lyrics can 
 		musixmatch => sub {  ::ReplaceFields($_[0], "https://www.musixmatch.com/lyrics/%a/%t", sub { my $s=::url_escapeall($_[0]); $s=~s/%20/-/g; $s }) },
 		sub
 			{
-				if (!$_[0]) {
+				if (!$_[0] || $_[0] eq "404 Not Found") {
 					$_[0] = $notfound; return 0;
 				}
-				
-				eval {
-					$_[0] =~ s/.*\"lyrics\":\{\"body\":\"((?:(?!\",\").)+).*/$1/s;
-					$_[0] =~ s/\\n/<br\/>/g;
-					return 1;
-				}
-				or do {
-					$_[0] = $notfound; return 0;
-				}
+
+				$_[0] =~ s/.*\"lyrics\":\{\"body\":\"((?:(?!\",\").)+).*/$1/s;
+				$_[0] =~ s/\\n/<br\/>/g;
+				return 1;
 			}],
 	# http://lyricwiki.org/api.php?artist=%a&song=%t&fmt=html
 	# http://search.azlyrics.com/cgi-bin/azseek.cgi?q="%a"+"%t"
@@ -322,7 +317,7 @@ sub load_from_web
 	if ($next)
 	{	$site = shift @{$self->{trynext}};
 		if (!$site)
-		{	$self->Set_message(_"No lyrics found");
+		{	$self->Set_message($notfound);
 			return;
 		}
 	}
@@ -444,11 +439,11 @@ sub loaded #_very_ crude html to gtktextview renderer
 	}
 	$self->{lastokurl}=$self->{url};
 
-	if (index($data, "This music is instrumental. Let the music play") != -1) {
+	if ($data =~ /\"type\":\"instrumental\"/) {
 		warn "found instrumental";
 		$self->Set_message($instrumental); return;
 	}
-
+	
 	for ($data)
 	{s/<!--.*?-->//gs;
 	 s#<noscript>.*</noscript>##gsi; #added to remove warnings from lyrc.com.ar, maybe should be restricted to lyrc.com.ar ?
