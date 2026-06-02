@@ -8,7 +8,7 @@
 package Simple_http;
 use strict;
 use warnings;
-use LWP::UserAgent;
+use Mojo::UserAgent;
 
 my $proxy= $::Options{Simplehttp_Proxy}
 	? $::Options{Simplehttp_ProxyHost}.':'.($::Options{Simplehttp_ProxyPort}||3128)
@@ -21,53 +21,50 @@ sub post_with_cb
 	$self->{params}=\%params;
 	my ($callback,$url,$post,$authtoken)=@params{qw/cb url post authtoken/};
 
-	my $ua = LWP::UserAgent->new();
-	#$ua->agent('Mozilla/5.0');
-	$ua->default_header('Authorization' => "Token $authtoken") if $authtoken;
-	$ua->default_header('Content-Type' => 'application/json') if $authtoken;
-	$ua->proxy("https", "connect://$proxy/") if $proxy;
-	$ua->timeout(40);
-
+	my $ua = Mojo::UserAgent->new();
+	$ua->proxy->https("https://$proxy/") if $proxy;
+	$ua->request_timeout(10);
+	
+	my %headers = ('Content-Type' => 'application/json');
+	$headers{'Authorization'} = "Token $authtoken" if $authtoken;
+	
 	open my $fh, '<', $post or die "failed to open: $!";
 	my $content = do { local $/; <$fh> };
 	close $fh;
 
-	my $response = $ua->post($url,
-		Content_Type => 'application/json',
-    	Content => $content );
-
-	my $result = $response->decoded_content;
-	if ($response->is_success) {
-		$callback->($result, error=>undef);
-	}
-	else {
-		warn "Error fetching " . $url . " : " . $response->status_line . "\n";
-		#warn "$result\n";
-		$callback->($response->status_line, error=>$result);
-	}
+	my $tx = $ua->post($url => \%headers => $content);
+	process_response($callback, $url, $tx);
 }
 
 sub get_with_cb
-{	my $self=bless {};
+{
+	my $self=bless {};
 	my %params=@_;
 	$self->{params}=\%params;
 	my ($callback,$url)=@params{qw/cb url/};
 
-	my $ua = LWP::UserAgent->new();
-	#$ua->agent('Mozilla/5.0');
-	$ua->proxy("https", "connect://$proxy/") if $proxy;
-	$ua->timeout(40);
+	my $ua = Mojo::UserAgent->new();
+	$ua->proxy->https("https://$proxy/") if $proxy;
+	$ua->request_timeout(10);
 
-	my $response = $ua->get($url);
+	my $tx = $ua->get($url);
+	process_response($callback, $url, $tx);
+}
 
-	my $result = $response->decoded_content;
-	if ($response->is_success) {
-		$callback->($result, error=>undef);
+sub process_response
+{
+	my ($callback,$url,$tx)=@_;
+	
+	my $res = $tx->res;
+
+	if ($res->is_success) {
+		$callback->($res->text, error=>undef);
 	}
 	else {
-		warn "Error fetching " . $url . " : " . $response->status_line . "\n";
-		#warn "$result\n";
-		$callback->($response->status_line, error=>$result);
+		my $err = $tx->error;
+		my $status_line = $err->{code} ? "$err->{code} $err->{message}" : $err->{message};
+		warn "Error fetching " . $url . " : " . $status_line . "\n";
+		$callback->($status_line, error=>$res->text);
 	}
 }
 
