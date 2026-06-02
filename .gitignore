@@ -6,4 +6,5 @@ nytprof*
 t/samples/
 
 .vscode/
+.idea/
 TODO
