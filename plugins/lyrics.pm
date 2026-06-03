@@ -439,6 +439,9 @@ sub loaded #_very_ crude html to gtktextview renderer
 	}
 	$self->{lastokurl}=$self->{url};
 
+	if ($data =~ /\"type\":\"no-lyrics\"/) {
+		$self->Set_message($notfound); return;
+	}
 	if ($data =~ /\"type\":\"instrumental\"/) {
 		warn "found instrumental";
 		$self->Set_message($instrumental); return;
