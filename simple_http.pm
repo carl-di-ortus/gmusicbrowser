@@ -23,7 +23,8 @@ sub post_with_cb
 
 	my $ua = Mojo::UserAgent->new();
 	$ua->proxy->https("https://$proxy/") if $proxy;
-	$ua->request_timeout(10);
+	$ua->request_timeout(5);
+	$ua->max_redirects(3);
 	
 	my %headers = ('Content-Type' => 'application/json');
 	$headers{'Authorization'} = "Token $authtoken" if $authtoken;
@@ -45,7 +46,8 @@ sub get_with_cb
 
 	my $ua = Mojo::UserAgent->new();
 	$ua->proxy->https("https://$proxy/") if $proxy;
-	$ua->request_timeout(10);
+	$ua->request_timeout(5);
+	$ua->max_redirects(3);
 
 	my $tx = $ua->get($url);
 	process_response($callback, $url, $tx);
