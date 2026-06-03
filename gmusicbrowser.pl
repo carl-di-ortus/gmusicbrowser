@@ -32,9 +32,9 @@ use Glib qw/filename_from_unicode filename_to_unicode/;
 
   # needed to get window xid, only needed for gstreamer visuals and for interaction with screensaver #FIXME make it optional
   # seems to be needed for Gtk3::Gdk::drag_status too ?
-  Glib::Object::Introspection->setup( basename=>'GdkX11', version=>'3.0', package=>'Gtk3::Gdk' );
-  push @Gtk3::Gdk::X11Window::ISA, 'Gtk3::Gdk::Window';
-  *Gtk3::Gdk::X11DragContext::status= *Gtk3::Gdk::drag_status{CODE};
+  # Glib::Object::Introspection->setup( basename=>'GdkX11', version=>'3.0', package=>'Gtk3::Gdk' );
+  # push @Gtk3::Gdk::X11Window::ISA, 'Gtk3::Gdk::Window';
+  # *Gtk3::Gdk::X11DragContext::status= *Gtk3::Gdk::drag_status{CODE};
 
   # make some cairo functions easier to use
   *Cairo::Context::set_source_pixbuf=		*Gtk3::Gdk::cairo_set_source_pixbuf{CODE};

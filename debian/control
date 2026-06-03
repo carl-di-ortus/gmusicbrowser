@@ -1,14 +1,15 @@
 Source: gmusicbrowser
+Maintainer: Carl di Ortus <reklamukibiras@gmail.com>
 Section: sound
 Priority: optional
-Maintainer: Quentin Sculo <squentin@free.fr>
-Homepage: http://gmusicbrowser.org/
 Build-Depends: debhelper (>= 5.0.0), markdown
-Standards-Version: 3.7.3
+Standards-Version: 3.8.4
+Homepage: http://gmusicbrowser.org/
 
 Package: gmusicbrowser
-Version: 1.1.99.4
 Architecture: all
+Section: sound
+Priority: optional
 Depends: perl, libgtk3-perl, libgtk-3-0, libutf8-all-perl
 Recommends: libintl-perl, libnet-dbus-perl, libglib-object-introspection-perl, gir1.2-gstreamer-1.0, libdigest-crc-perl, libhtml-parser-perl, libio-compress-perl, libmojolicious-perl, libtext-autoformat-perl, libxml-perl
 Suggests: mpv, mplayer, mpg123, vorbis-tools, alsa-utils, gir1.2-webkit2, gir1.2-notify, gir1.2-wnck, gir1.2-poppler
@@ -17,4 +18,5 @@ Description: very customizable jukebox for large collections of music files
  (same artist/album/title), supports multiple genres per song, ratings, and
  customizable labels. Powerful search system, random mode and mass-tagging
  dialog. Uses GStreamer, mpg321/ogg123/flac123 or mplayer for playback. 
+Homepage: http://gmusicbrowser.org/
 
