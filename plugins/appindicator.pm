@@ -10,7 +10,7 @@
 name	App indicator
 title	App Indicator plugin
 desc	Displays a panel indicator in some desktops
-req	gir(AppIndicator3-0.1, gir1.2-appindicator3-0.1 libappindicator-gtk3)
+req	gir(AyatanaAppIndicator3-0.1, gir1.2-ayatanaappindicator3-0.1 libayatana-appindicator-gtk3)
 =cut
 
 package GMB::Plugin::AppIndicator;
@@ -29,7 +29,12 @@ my %mactions= # action when middle-clicking on icon, must correspond to an id in
 );
 my ($indicator,$iconpath);
 
-Glib::Object::Introspection->setup( basename => 'AppIndicator3', version => '0.1', package => 'AppIndicator');
+#canonical's libappindicator is gone from most distros, the ayatana fork provides the same api under a different gir namespace
+my $found;
+for my $ns (qw/AyatanaAppIndicator3 AppIndicator3/)
+{	eval { Glib::Object::Introspection->setup( basename => $ns, version => '0.1', package => 'AppIndicator'); 1} and do { $found=$ns; last };
+}
+die "no typelib found for AyatanaAppIndicator3-0.1 or AppIndicator3-0.1\n" unless $found;
 
 sub Start
 {	$indicator ||= AppIndicator::Indicator->new(::PROGRAM_NAME,'gmusicbrowser','application-status');
