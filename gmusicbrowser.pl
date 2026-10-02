@@ -2420,7 +2420,7 @@ sub ReadOldSavedTags
 
 	my $oldID=-1;
 	no warnings 'utf8'; # to prevent 'utf8 "\xE9" does not map to Unicode' type warnings about path and file which are stored as they are on the filesystem #FIXME find a better way to read lines containing both utf8 and unknown encoding
-	my ($loadsong)=Songs::MakeLoadSub({},split / /,$Songs::OLD_FIELDS);
+	my ($loadsong)=Songs::MakeLoadSub({},0,split / /,$Songs::OLD_FIELDS);
 	my (%IDforAlbum,%IDforArtist);
 	my @newIDs; SongArray::start_init();
 	my $lengthcheck=SongArray->new;
@@ -2562,6 +2562,7 @@ sub ReadSavedTags	#load tags _and_ settings
 	# read first line to determine if old version, version >1.1.7 stars with "# gmbrc version=",  version <1.1 starts with a letter, else it's version<=1.1.7 (starts with blank or # (for comments) or [ (section name))
 	my $firstline=<$fh>;
 	unless (defined $firstline) { die "Can't read '$loadfile', aborting...\n" }
+	my $filenames_utf8= $firstline=~m/\bfilenames=utf8\b/;
 	my $oldversion;
 	if ($firstline=~m/^#?\s*gmbrc version=(\d+\.\d+)/) { $oldversion=$1 }
 	elsif ($ext) { die "Can't find gmbrc header in '$loadfile', aborting...\n" }	# compressed gmbrc not supported with old versions, because can't seek backward in compressed fh
@@ -2612,7 +2613,7 @@ sub ReadSavedTags	#load tags _and_ settings
 
 		my $songs=$lines{Songs};
 		my $fields=shift @$songs;
-		my ($loadsong,$extra_sub)=Songs::MakeLoadSub(\%lines,split /\t/,$fields);
+		my ($loadsong,$extra_sub)=Songs::MakeLoadSub(\%lines,$filenames_utf8,split /\t/,$fields);
 		my @newIDs;
 		while (my $line=shift @$songs)
 		{	my ($oldID,@vals)= split /\t/, $line,-1;
@@ -2796,7 +2797,7 @@ sub SaveTags	#save tags _and_ settings
 	unless ($fh) { warn "Save aborted\n"; POSIX::_exit(0) if $fork; return; }
 	warn "Writing tags in $SaveFile$ext ...\n" if $Verbose || !$fork;
 
-	print $fh "# gmbrc version=".VERSION." time=".time."\n"  or $error||=$!;
+	print $fh "# gmbrc version=".VERSION." time=".time." filenames=utf8\n"  or $error||=$!;
 
 	my $optionslines=SaveRefToLines(\%Options);
 	print $fh "[Options]\n$$optionslines\n"  or $error||=$!;
@@ -6048,6 +6049,7 @@ sub Uris_to_IDs
 
 sub FolderToIDs
 {	my ($add,$recurse,@dirs)=@_;
+	_utf8_off($_) for @dirs;
 	s#^file://## for @dirs;
 	@dirs= map cleanpath($_), @dirs;
 	my @files;
@@ -6056,12 +6058,12 @@ sub FolderToIDs
 	while (defined(my $dir=shift @dirs))
 	{	if (-d $dir)
 		{	# make sure it doesn't look in the same dir twice due to symlinks
-			my $real= -l $dir ? simplify_path(rel2abs(readlink($dir),parentdir($dir))) : $dir;
+			my $real= -l $dir ? simplify_path(rel2abs(CORE::readlink($dir),parentdir($dir))) : $dir;
 			next if exists $followeddirs{$real};
 			$followeddirs{$real}=undef;
 
 			if (opendir my($DIRH),$dir)
-			{	my @list= map $dir.SLASH.$_, grep !m#^\.#, readdir $DIRH;
+			{	my @list= map $dir.SLASH.$_, grep !m#^\.#, CORE::readdir $DIRH;
 				closedir $DIRH;
 				push @files, grep -f && m/$ScanRegex/, @list;
 				push @dirs, grep -d, @list   if $recurse;
@@ -6106,6 +6108,7 @@ sub MakeScanRegex
 sub ScanFolder
 {	warn "Scanning : @_\n" if $Verbose;
 	my $dir=$_[0];
+	_utf8_off($dir);
 	$dir=~s#^file://##;
 	$dir=cleanpath($dir);
 	MakeScanRegex() unless $ScanRegex;
@@ -6115,7 +6118,7 @@ sub ScanFolder
 	my @files;
 	if (-d $dir)
 	{	if (opendir my($DIRH),$dir)
-		{	@files=readdir $DIRH;
+		{	@files=CORE::readdir $DIRH;
 			closedir $DIRH;
 		}
 		else { warn "ScanFolder: can't open folder $dir : $!\n"; return }
@@ -6133,7 +6136,7 @@ sub ScanFolder
 		if (-d $path_file)
 		{	#next if $notrecursive;
 			# make sure it doesn't look in the same dir twice due to symlinks
-			my $real= -l $path_file ? simplify_path(rel2abs(readlink($path_file),$dir)) : $path_file;
+			my $real= -l $path_file ? simplify_path(rel2abs(CORE::readlink($path_file),$dir)) : $path_file;
 			next if exists $FollowedDirs{$real};
 			$FollowedDirs{$real}=undef;
 			push @ToScan,$path_file;

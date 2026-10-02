@@ -380,8 +380,8 @@ our %timespan_menu=
 		set	=> '#_#=#VAL#; ::_utf8_off(#_#);',
 		display	=> '::filename_to_utf8displayname(#get#)',
 		hash_to_display => '::filename_to_utf8displayname(#VAL#)', #only used by FolderList:: and MassTag::
-		load	=> '#_#=::decode_url(#VAL#)',
-		save	=> 'filename_escape(#_#)',
+		load	=> '#_#=filename_load(#VAL#,$filenames_utf8)',
+		save	=> 'filename_save(#_#)',
 		#'filterpat:string'	=> [ display => \&::filename_to_utf8displayname, ],
 	},
 	fewpath=>
@@ -393,9 +393,9 @@ our %timespan_menu=
 		get	=> '___name[#gid#]',
 		set	=> '#gid# = #path_to_gid#;',
 		path_to_gid	=> 'do {my $v=#VAL#; ::_utf8_off($v); ___gid{$v}||= push(@___name, $v) -1; }',
-		url_to_gid	=> 'do {my $v=::decode_url(#VAL#);    ___gid{$v}||= push(@___name, $v) -1; }',
+		url_to_gid	=> 'do {my $v=filename_load(#VAL#,$filenames_utf8); ___gid{$v}||= push(@___name, $v) -1; }',
 		load	=> '#gid# = #url_to_gid#',
-		save	=> 'filename_escape(#get#)',
+		save	=> 'filename_save(#get#)',
 	},
 # 	picture =>
 #	{	get_picture	=> '__#mainfield#_picture[#GID#] || $::Options{Default_picture_#mainfield#};',
@@ -411,8 +411,8 @@ our %timespan_menu=
 		get_for_gid	=> '#_# || #default#;',
 		pixbuf_for_gid	=> 'my $file= #get_for_gid#; GMB::Picture::pixbuf($file);',
 		set_for_gid	=> '::_utf8_off(#VAL#); #_#= #VAL# eq "" ? undef : #VAL#; ::HasChanged("Picture_#mainfield#",#GID#);',
-		load_extra	=> 'if (#VAL# ne "") { #_#= ::decode_url(#VAL#); }',
-		save_extra	=> 'do { my $v=#_#; defined $v ? filename_escape($v) : ""; }',
+		load_extra	=> 'if (#VAL# ne "") { #_#= filename_load(#VAL#,$filenames_utf8); }',
+		save_extra	=> 'do { my $v=#_#; defined $v ? filename_save($v) : ""; }',
 		get		=> '__#mainfield#_picture[ ##mainfield#->get_gid# ]',
 	},
 	fewstring=>	#for strings likely to be repeated
@@ -1617,6 +1617,22 @@ sub filename_escape	#same as ::url_escape but escape different characters
 	return $s;
 }
 
+sub filename_save
+{	my $s=$_[0];
+	return $s if utf8::is_utf8($s);
+	return $s if utf8::decode($s);
+	# NUL cannot occur in a filename: use it to mark escaped non-UTF-8 bytes.
+	return "\x00".filename_escape($_[0]);
+}
+
+sub filename_load
+{	my ($s,$filenames_utf8)=@_;
+	return ::decode_url($s) unless $filenames_utf8;
+	return ::decode_url($s) if $s=~s/^\x00//;
+	::_utf8_off($s);
+	return $s;
+}
+
 sub Macro
 {	local $_=shift;
 	my %h=@_;
@@ -1981,13 +1997,14 @@ sub UpdateFuncs
 }
 
 sub MakeLoadSub
-{	my ($extradata,@loaded_slots)=@_;
+{	my ($extradata,$filenames_utf8,@loaded_slots)=@_;
+	my $filename_mode_code= 'my $filenames_utf8='.($filenames_utf8 ? 1 : 0).'; ';
 	my %extra_sub;
 	my %loadedfields;
 	$loadedfields{$loaded_slots[$_]}=$_ for 0..$#loaded_slots;
 	# begin with a line that checks if a given path-file has already been loaded into the library
-	my $pathfile_code= '$_['.$loadedfields{path}.'] ."/". $_['.$loadedfields{file}.']';
-	my $code= '$uniq_check{ '.$pathfile_code.' }++ && do { warn "warning: file ".'.$pathfile_code.'." already in library, skipping.\\n"; return };'."\n";
+	my $pathfile_code= 'filename_load($_['.$loadedfields{path}.'],$filenames_utf8) ."/". filename_load($_['.$loadedfields{file}.'],$filenames_utf8)';
+	my $code= 'my $pathfile='.$pathfile_code.'; $uniq_check{$pathfile}++ && do { warn "warning: file ".::filename_to_utf8displayname($pathfile)." already in library, skipping.\\n"; return };'."\n";
 	# new file, increment $LastID
 	$code.='$LastID++;'."\n";
 	for my $field (@Fields)
@@ -2018,11 +2035,11 @@ sub MakeLoadSub
 				$code.= "\t$c;\n" if $c;
 				$i++;
 			}
-			$extra_sub{$mainfield}= Compile("LoadSub_$mainfield" => "sub {$code}") || sub {};
+			$extra_sub{$mainfield}= Compile("LoadSub_$mainfield" => $filename_mode_code."sub {$code}") || sub {};
 		}
 	}
 	$code.= '; return $LastID;';
-	my $loadsub= Compile(LoadSub => "my %uniq_check; sub {$code}");
+	my $loadsub= Compile(LoadSub => $filename_mode_code."my %uniq_check; sub {$code}");
 	return $loadsub,\%extra_sub;
 }
 sub MakeSaveSub
@@ -2059,7 +2076,8 @@ sub MakeSaveSub
 
 sub New
 {	my $file=$_[0];
-	#check already in @Songs#FIXME
+	::_utf8_off($file);
+	return if defined FindID($file);
 	warn "Reading Tag for $file\n" if $::Verbose;
 	my ($size,$modif)=(stat $file)[7,9];
 	my $values= FileTag::Read($file,findlength=>1);
@@ -2530,6 +2548,7 @@ sub Build_IDFromFile
 }
 sub FindID
 {	my $f=$_[0];
+	::_utf8_off($f);
 	if ($f=~m/\D/)
 	{	my ($dir,$file)= ::splitpath(::simplify_path($f));
 		if (defined $file)
