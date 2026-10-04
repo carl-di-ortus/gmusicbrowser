@@ -6,27 +6,13 @@
 # it under the terms of the GNU General Public License version 3, as
 # published by the Free Software Foundation
 
-=for gmbplugin AppIndicator
-name	App indicator
-title	App Indicator plugin
-desc	Displays a panel indicator in some desktops
-req	gir(AyatanaAppIndicator3-0.1, gir1.2-ayatanaappindicator3-0.1 libayatana-appindicator-gtk3)
-=cut
+#StatusNotifierItem tray icon, used by the "Show tray icon" option when the desktop provides a StatusNotifierWatcher
+#requires gir AyatanaAppIndicator3-0.1 (gir1.2-ayatanaappindicator3-0.1 libayatana-appindicator-gtk3)
 
-package GMB::Plugin::AppIndicator;
+package GMB::AppIndicator;
 use strict;
 use warnings;
-use constant
-{	OPT	=> 'PLUGIN_AppIndicator_',
-};
 
-::SetDefaultOptions(OPT, MiddleClick=>'playpause');
-
-my %mactions= # action when middle-clicking on icon, must correspond to an id in the tray menu (@::TrayMenu)
-(	playpause=> _"Play/Pause",
-	showhide=> _"Show/Hide",
-	next	=> _"Next",
-);
 my ($indicator,$iconpath);
 
 #canonical's libappindicator is gone from most distros, the ayatana fork provides the same api under a different gir namespace
@@ -46,15 +32,21 @@ sub Start
 sub Stop
 {	::UnWatch_all($indicator);
 	$indicator->get_menu->destroy;
-	$indicator->set_status('passive'); #can't find how to destroy it, so hide it and reuse it if plugin reactivated
+	$indicator->set_status('passive'); #can't find how to destroy it, so hide it and reuse it if reactivated
 }
 
-sub prefbox
-{	my $vbox= Gtk3::VBox->new(::FALSE, 2);
-	my $middleclick= ::NewPrefCombo(OPT.'MiddleClick', \%mactions, text => _"Middle-click action :", cb=>\&Update);
-	my $warning= Gtk3::Label->new_with_format("<i>%s</i>",_"(The middle-click action doesn't work correctly in some desktops)");
-	$vbox->pack_start($_,::FALSE,::FALSE,2) for $middleclick,$warning;
-	return $vbox;
+#true if a StatusNotifierWatcher owns its name on the session bus, ie the desktop can show this icon
+my $gio;
+sub WatcherPresent
+{	my $has= eval
+	{	$gio ||= do { Glib::Object::Introspection->setup(basename=>'Gio', version=>'2.0', package=>'GMB::AppIndicator::Gio'); 1 };
+		my $bus= GMB::AppIndicator::Gio::bus_get_sync('session', undef);
+		my $r= $bus->call_sync('org.freedesktop.DBus','/org/freedesktop/DBus','org.freedesktop.DBus','NameHasOwner',
+			Glib::Variant->new('(s)',['org.kde.StatusNotifierWatcher']), Glib::VariantType->new('(b)'), 'none', 1000, undef);
+		$r->get('(b)')->[0];
+	};
+	warn "AppIndicator: can't check for a StatusNotifierWatcher on D-Bus : $@" unless defined $has;
+	return $has;
 }
 
 sub QueueUpdate
@@ -67,7 +59,7 @@ sub Update
 	$menu->show_all;
 	$indicator->set_status('active');
 	$indicator->set_menu($menu);
-	my ($menuentry)= grep $_->{id} && $_->{id} eq $::Options{OPT.'MiddleClick'}, $menu->get_children;
+	my ($menuentry)= grep $_->{id} && $_->{id} eq $::Options{TrayMiddleClick}, $menu->get_children;
 	$indicator->set_secondary_activate_target($menuentry) if $menuentry;
 }
 

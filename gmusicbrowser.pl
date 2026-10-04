@@ -1165,7 +1165,7 @@ our ($RandomMode,$SortFields,$ListMode);
 our ($SongID,$prevID,$Recent,$RecentPos,$Queue); our $QueueAction=our $NextAction='';
 our ($Position,$ChangedID,$ChangedPos,@NextSongs,$NextFileToPlay);
 our ($MainWindow,$FullscreenWindow); my $OptionsDialog;
-my $TrayIcon;
+my $TrayIcon; my $TrayIconSNI;
 my %Editing; #used to keep track of opened song properties dialog and lyrics dialog
 our $PlayTime;
 our ($StartTime,$StartedAt,$PlayingID, @Played_segments);
@@ -1245,6 +1245,7 @@ our %Options=
 	use_GST_for_server=>1,
 	Icecast_port	=> '8000',
 	UseTray		=> 1,
+	TrayMiddleClick	=> 'playpause',
 	CloseToTray	=> 0,
 	ShowTipOnSongChange	=> 0,
 	TrayTipTimeLength	=> 3000, #in ms
@@ -1890,10 +1891,9 @@ Update_QueueActionList();
 QueueChanged() if $QueueAction;
 
 CreateMainWindow( $CmdLine{layout}||$Options{Layout} );
-ShowHide(0) if $CmdLine{hide} || ($Options{StartInTray} && $Options{UseTray} && $TrayIconAvailable);
-SkipTo($PlayTime) if $PlayTime; #done only now because of gstreamer
-
 CreateTrayIcon();
+ShowHide(0) if $CmdLine{hide} || ($Options{StartInTray} && ($TrayIcon || $TrayIconSNI));
+SkipTo($PlayTime) if $PlayTime; #done only now because of gstreamer
 
 if (my $cmds=delete $CmdLine{runcmd}) { run_command(undef,$_) for @$cmds; }
 $SIG{TERM} = \&Quit;
@@ -2621,6 +2621,8 @@ sub ReadSavedTags	#load tags _and_ settings
 		if ($oldversion<=1.1011) {delete $Options{$_} for qw/ScanPlayOnly/;} #cleanup old options
 		$Options{AutoRemoveCurrentSong}= delete $Options{TAG_auto_check_current} if $oldversion<1.1005 && exists $Options{TAG_auto_check_current};
 		$Options{PlayedMinPercent}= 100*delete $Options{PlayedPercent} if exists $Options{PlayedPercent};
+		$Options{UseTray}=1 if delete $Options{PLUGIN_AppIndicator}; #the AppIndicator plugin is now used by the tray icon option
+		$Options{TrayMiddleClick}= delete $Options{PLUGIN_AppIndicator_MiddleClick} if exists $Options{PLUGIN_AppIndicator_MiddleClick};
 		if ($Options{ArtistSplit}) # for versions <= 1.1.5
 		{	$Options{Artists_split_re}= [ map { $artistsplit_old_to_new{$_}||$_ } grep $_ ne '$', split /\|/, delete $Options{ArtistSplit} ];
 		}
@@ -6948,9 +6950,15 @@ sub PrefLayouts
 	my $checkT2=NewPrefCheckButton(CloseToTray => _"Close to tray");
 	my $checkT3=NewPrefCheckButton(ShowTipOnSongChange => _"Show tray tip on song change", widget=>$traytiplength);
 	my $checkT4=NewPrefSpinButton('TrayTipDelay', 0,10000, step=>100, text=> _"Delay before showing tray tip popup on mouse over : %d ms", cb=>\&SetTrayTipDelay);
+	my @trayclick= !$TrayIconSNI ? () :
+	(	NewPrefCombo(TrayMiddleClick => #keys must correspond to an id in @TrayMenu
+			{ playpause=> _"Play/Pause", showhide=> _"Show/Hide", next=> _"Next" },
+			text => _"Middle-click action :", cb=>\&GMB::AppIndicator::Update),
+		Gtk3::Label->new_with_format("<i>%s</i>",_"(The middle-click action doesn't work correctly in some desktops)"),
+	);
 	my $checkT1=NewPrefCheckButton( UseTray => _"Show tray icon",
 					cb=> sub { &CreateTrayIcon; },
-					widget=> Vpack($checkT5,$checkT4,$checkT3)
+					widget=> Vpack($checkT5,$checkT4,$checkT3,@trayclick)
 					);
 	$checkT1->set_sensitive($TrayIconAvailable);
 
@@ -8034,12 +8042,25 @@ sub UpdateTrayIcon
 }
 
 sub CreateTrayIcon
-{	if ($TrayIcon)
+{	if ($TrayIcon || $TrayIconSNI)
 	{	return if $Options{UseTray};
-		$TrayIcon=undef;
+		GMB::AppIndicator::Stop() if $TrayIconSNI;
+		$TrayIcon=$TrayIconSNI=undef;
 		return;
 	}
-	elsif (!$Options{UseTray} || !$TrayIconAvailable)	 {return}
+	elsif (!$Options{UseTray})	 {return}
+
+	#prefer StatusNotifierItem when available, Gtk3::StatusIcon only works with XEmbed trays on X11
+	if (eval { require 'gmusicbrowser_appindicator.pm' } && GMB::AppIndicator::WatcherPresent())
+	{	GMB::AppIndicator::Start();
+		$TrayIconSNI=1;
+		return;
+	}
+	warn "AppIndicator not usable for the tray icon : $@\n" if $debug && $@;
+	if (!$TrayIconAvailable || Gtk3::Gdk::Display::get_default()->get_name!~m/:/)
+	{	warn "No tray icon : no StatusNotifierWatcher on D-Bus, and Gtk3::StatusIcon needs an X11 display\n";
+		return;
+	}
 
 	$TrayIcon= Gtk3::StatusIcon->new;
 	SetTrayTipDelay();
