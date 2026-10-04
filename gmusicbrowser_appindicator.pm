@@ -30,8 +30,9 @@ sub Start
 	QueueUpdate();
 }
 sub Stop
-{	::UnWatch_all($indicator);
-	$indicator->get_menu->destroy;
+{	delete $::ToDo{'2_AppIndicator'}; #a queued Update would make it active again
+	::UnWatch_all($indicator);
+	if (my $menu=$indicator->get_menu) { $menu->destroy }	#no menu if stopped before the first Update
 	$indicator->set_status('passive'); #can't find how to destroy it, so hide it and reuse it if reactivated
 }
 
