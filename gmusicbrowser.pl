@@ -122,12 +122,6 @@ use Encode qw/_utf8_on _utf8_off/;
  # alternate names for some functions that were, once upon a time, not provided by Glib
  *filename_to_utf8displayname=\&Glib::filename_display_name if *Glib::filename_display_name{CODE};
  *PangoEsc=\&Glib::Markup::escape_text if *Glib::Markup::escape_text{CODE};
- if (eval($POSIX::VERSION)<1.18) #previously, date strings returned by strftime needed to be decoded by the locale encoding   # maybe too old to care about these versions ?
- {	my ($encoding)= setlocale(LC_TIME)=~m#\.([^@]+)#;
-	$encoding='cp'.$encoding if $^O eq 'MSWin32' && $encoding=~m/^\d+$/;
-	if (!Encode::resolve_alias($encoding)) {warn "Can't find dates encoding used for dates, (LC_TIME=".setlocale(LC_TIME)."), dates may have wrong encoding\n";$encoding=undef}
-	*strftime_utf8= sub { $encoding ? Encode::decode($encoding, &strftime) : &strftime; };
- }
 }
 use List::Util qw/min max sum first/;
 use File::Copy;
@@ -138,7 +132,6 @@ use Carp;
 $SIG{INT} = sub {&Carp::cluck; exit 2};
 $SIG{CHLD}= 'IGNORE'; # to get rid of zombie child processes
 
-#use constant SLASH => ($^O  eq 'MSWin32')? '\\' : '/';
 use constant SLASH => '/'; #gtk file chooser use '/' in win32 and perl accepts both '/' and '\'
 
 # Find dir containing other files (*.pm & pix/) -> $DATADIR
@@ -157,8 +150,8 @@ use constant
 {
  TRUE  => 1,
  FALSE => 0,
- VERSION => '1.109901',
- VERSIONSTRING => '1.1.99.1',
+ VERSION => '1.109905',
+ VERSIONSTRING => '1.1.99.5',
  PIXPATH => $DATADIR.SLASH.'pix'.SLASH,
  PROGRAM_NAME => 'gmusicbrowser',
 
@@ -190,7 +183,6 @@ BEGIN
  if ($@)
  {	eval {require Locale::gettext};
 	if ($@) { warn "neither Locale::Messages, nor Locale::gettext found -> no translations\n"; }
-	elsif ($Locale::gettext::VERSION<1.04) { warn "Needs at least version 1.04 of Locale::gettext, v$Locale::gettext::VERSION found -> no translations\n" }
 	else
 	{	warn "Locale::Messages not found, using Locale::gettext instead\n" if $::debug;
 		my $d= eval { Locale::gettext->domain($domain); };
