@@ -6303,12 +6303,11 @@ sub AutoSelPicture
 sub AboutDialog
 {	my $dialog=Gtk3::AboutDialog->new;
 	$dialog->set_version(VERSIONSTRING);
-	$dialog->set_copyright("Copyright © 2005-2020 Quentin Sculo");
+	$dialog->set_copyright("Copyright © 2005-2020 Quentin Sculo\nCopyright © 2024-2026 Carl di Ortus");
 	$dialog->set_logo_icon_name('gmusicbrowser');
-	#$dialog->set_comments();
 	$dialog->set_license("Released under the GNU General Public Licence version 3\n(http://www.gnu.org/copyleft/gpl.html)");
 	$dialog->set_website('http://gmusicbrowser.org');
-	$dialog->set_authors(['Quentin Sculo <squentin@free.fr>']);
+	$dialog->set_authors(['Quentin Sculo <squentin@free.fr>','Carl di Ortus <reklamukibiras@gmail.com>']);
 	$dialog->set_artists([ sort
 		"svg icon : zeltak",
 		"tango icon theme : Jean-Philippe Guillemin",
