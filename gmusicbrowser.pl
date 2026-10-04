@@ -59,10 +59,6 @@ sub Load_Wnck
 }
 
 {no warnings 'redefine';
-  # fix for binding not handling gdk_pixbuf_loader_write properly prior to Glib::Object::Introspection::VERSION 0.049
-  *Gtk3::Gdk::PixbufLoader::write= sub { return Glib::Object::Introspection->invoke( 'GdkPixbuf', 'PixbufLoader', 'write', $_[0], [unpack 'C*', $_[1]] ); }
-	if $Glib::Object::Introspection::VERSION<0.049;
-
   sub Gtk3::ComboBox::get_active_iter
   {	my ($ok,$iter)= Glib::Object::Introspection->invoke( 'Gtk', 'ComboBox', 'get_active_iter', $_[0]);
 	return $ok ? $iter : undef;
