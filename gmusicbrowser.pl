@@ -1788,13 +1788,10 @@ my $gnomeclient;
 if ($CmdLine{UseGnomeSession})
 { eval		# use the gnome libraries, if present, to enable some session management
   {	require Gnome2;
-	#my $application=Gnome2::Program->init(PROGRAM_NAME, VERSION, 'libgnomeui');
 	my $application=Gnome2::Program->init(PROGRAM_NAME, VERSION);
 	$gnomeclient=Gnome2::Client->master();
 	$gnomeclient->signal_connect('die' => sub { Gtk3->main_quit; });
 	$gnomeclient->signal_connect(save_yourself => sub { SaveTags(); return 1 });
-	#$gnomeclient->set_restart_command($0,'-C',$SaveFile); #FIXME
-	#$gnomeclient->set_restart_style('if-running');
   };
   if ($@) {warn "Error loading Gnome2.pm => can't use gnome-session :\n $@\n"}
 }
