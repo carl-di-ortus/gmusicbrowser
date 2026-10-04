@@ -2419,7 +2419,6 @@ sub ReadOldSavedTags
 	Post_Options_init();
 
 	my $oldID=-1;
-	no warnings 'utf8'; # to prevent 'utf8 "\xE9" does not map to Unicode' type warnings about path and file which are stored as they are on the filesystem #FIXME find a better way to read lines containing both utf8 and unknown encoding
 	my ($loadsong)=Songs::MakeLoadSub({},0,split / /,$Songs::OLD_FIELDS);
 	my (%IDforAlbum,%IDforArtist);
 	my @newIDs; SongArray::start_init();
@@ -2555,7 +2554,7 @@ sub ReadSavedTags	#load tags _and_ settings
 			return;
 		}
 	}
-	warn "Reading saved tags in $loadfile ...\n";
+	print "Reading saved tags in $loadfile ...\n";
 	$SaveFile.=$1 if $loadfile=~m#($gmbrc_ext_re)# && $SaveFile!~m#$gmbrc_ext_re#; # will use .gz/.xz to save if read from a .gz/.xz gmbrc
 
 	setlocale(LC_NUMERIC, 'C');  # so that '.' is used as a decimal separator when converting numbers into strings
@@ -2679,7 +2678,7 @@ sub ReadSavedTags	#load tags _and_ settings
 	&launchIdleLoop;
 
 	setlocale(LC_NUMERIC, '');
-	warn "Reading saved tags in $loadfile ... done\n";
+	print "Reading saved tags in $loadfile ... done\n";
 	Post_ReadSavedTags();
 }
 sub Post_Options_init
@@ -2795,7 +2794,7 @@ sub SaveTags	#save tags _and_ settings
 	my $error;
 	(my$fh,my$tempfile,$ext)= Open_gmbrc("$SaveFile.new.$$"."$ext",1);
 	unless ($fh) { warn "Save aborted\n"; POSIX::_exit(0) if $fork; return; }
-	warn "Writing tags in $SaveFile$ext ...\n" if $Verbose || !$fork;
+	print "Writing tags in $SaveFile$ext ...\n" if $Verbose || !$fork;
 
 	print $fh "# gmbrc version=".VERSION." time=".time." filenames=utf8\n"  or $error||=$!;
 
@@ -2862,7 +2861,7 @@ sub SaveTags	#save tags _and_ settings
 		unlink $_ for find_gmbrc_file($SaveFile); #make sure there is no other old gmbrc without .bak, as they could cause confusion
 	}
 	rename $tempfile,$SaveFile.$ext  or warn $!;
-	warn "Writing tags in $SaveFile$ext ... done\n" if $Verbose || !$fork;
+	print "Writing tags in $SaveFile$ext ... done\n" if $Verbose || !$fork;
 	POSIX::_exit(0) if $fork;
 }
 
