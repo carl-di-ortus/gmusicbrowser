@@ -23,7 +23,10 @@ for my $ns (qw/AyatanaAppIndicator3 AppIndicator3/)
 die "no typelib found for AyatanaAppIndicator3-0.1 or AppIndicator3-0.1\n" unless $found;
 
 sub Start
-{	$indicator ||= AppIndicator::Indicator->new(::PROGRAM_NAME,'gmusicbrowser','application-status');
+{	if (!$indicator)
+	{	$indicator= AppIndicator::Indicator->new(::PROGRAM_NAME,'gmusicbrowser','application-status');
+		$indicator->signal_connect(scroll_event => \&Scroll);
+	}
 	# events that requires updating the traymenu :
 	::Watch($indicator, $_=> \&QueueUpdate) for qw/Lock Playing Windows/;
 	#::Watch($indicator, $_=> \&UpdateIcon) for qw/Playing Icons/; #FIXME needs initialization #deactivated because it can't work for now
@@ -34,6 +37,18 @@ sub Stop
 	::UnWatch_all($indicator);
 	if (my $menu=$indicator->get_menu) { $menu->destroy }	#no menu if stopped before the first Update
 	$indicator->set_status('passive'); #can't find how to destroy it, so hide it and reuse it if reactivated
+}
+
+#touchpads send lots of small deltas, so only change the volume once per mouse wheel notch (120)
+my $scrolled=0;
+my $inverted= ($ENV{XDG_CURRENT_DESKTOP}//'')=~m/KDE/; #plasma sends Qt's wheel delta (positive=up), the library assumes positive=down
+sub Scroll
+{	my (undef,$delta,$dir)=@_;
+	return unless $dir eq 'up' || $dir eq 'down';
+	$dir= $dir eq 'up' ? 'down' : 'up' if $inverted;
+	$scrolled+= $dir eq 'up' ? $delta : -$delta;
+	while ($scrolled>= 120) { ::ChangeVol('up');   $scrolled-=120 }
+	while ($scrolled<=-120) { ::ChangeVol('down'); $scrolled+=120 }
 }
 
 #true if a StatusNotifierWatcher owns its name on the session bus, ie the desktop can show this icon
