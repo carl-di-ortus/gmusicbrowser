@@ -27,13 +27,14 @@ my $glib= eval
 	1;
 };
 
-#canonical's libappindicator is gone from most distros, the ayatana fork provides the same api under a different gir namespace
-my $found= $glib;
-for my $ns (qw/AyatanaAppIndicator3 AppIndicator3/)
-{	last if $found;
-	eval { Glib::Object::Introspection->setup( basename => $ns, version => '0.1', package => 'AppIndicator'); 1} and $found=$ns;
+if (!$glib)
+{	#canonical's libappindicator is gone from most distros, the ayatana fork provides the same api under a different gir namespace
+	my $found;
+	for my $ns (qw/AyatanaAppIndicator3 AppIndicator3/)
+	{	eval { Glib::Object::Introspection->setup( basename => $ns, version => '0.1', package => 'AppIndicator'); 1} and do { $found=$ns; last };
+	}
+	die "no typelib found for AyatanaAppIndicatorGlib-2.0, AyatanaAppIndicator3-0.1 or AppIndicator3-0.1\n" unless $found;
 }
-die "no typelib found for AyatanaAppIndicatorGlib-2.0, AyatanaAppIndicator3-0.1 or AppIndicator3-0.1\n" unless $found;
 
 sub Start
 {	if (!$indicator)
@@ -52,41 +53,6 @@ sub Stop
 	if ($glib) { $menu->destroy if $menu; $menu=undef }
 	elsif (my $m=$indicator->get_menu) { $m->destroy }	#no menu if stopped before the first Update
 	$indicator->set_status('passive'); #can't find how to destroy it, so hide it and reuse it if reactivated
-}
-
-sub InitGlib
-{	my $actions= GMB::AppIndicator::Gio::SimpleActionGroup->new;
-	my $middleclick= GMB::AppIndicator::Gio::SimpleAction->new('middleclick',undef);
-	$middleclick->signal_connect(activate => sub { my $entry=MiddleClickEntry(); $entry->activate if $entry; });
-	$actions->insert($middleclick);
-	$indicator->set_actions($actions);
-	$indicator->set_menu(GMB::AppIndicator::Gio::Menu->new); #the library requires one, the real menu is the dbusmenu
-	$indicator->set_secondary_activate_target('middleclick');
-	$indicator->signal_connect(activate => sub { ::ShowHide() });
-	$indicator->signal_connect(connection_changed => sub { ExportDbusmenu() if $_[1] });
-}
-
-#the dbusmenu has to be on the path of the item's Menu property, the item is found in the watcher's list by our bus name
-sub ExportDbusmenu
-{	return if defined $dbusmenu;	#exported or pending
-	my $bus= GMB::AppIndicator::Gio::bus_get_sync('session', undef);
-	my $me= $bus->get_unique_name;
-	my $items= eval
-	{	my $r= $bus->call_sync('org.kde.StatusNotifierWatcher','/StatusNotifierWatcher','org.freedesktop.DBus.Properties','Get',
-			Glib::Variant->new('(ss)',['org.kde.StatusNotifierWatcher','RegisteredStatusNotifierItems']), undef, 'none', 1000, undef);
-		$r->get_child_value(0)->get_variant->get('as');
-	};
-	my ($item)= grep m#^\Q$me\E/#, @{ $items||[] };
-	return warn "AppIndicator: tray icon not found in the StatusNotifierWatcher list, its menu won't work\n" unless $item;
-	$dbusmenu=0;
-	#async, a blocking call to ourselves would deadlock as our main loop has to answer it
-	$bus->call($me, substr($item,length $me), 'org.freedesktop.DBus.Properties','Get',
-		Glib::Variant->new('(ss)',['org.kde.StatusNotifierItem','Menu']), undef, 'none', 1000, undef, sub
-		{	my $path= eval { $bus->call_finish($_[1])->get_child_value(0)->get_variant->get('o') };
-			unless ($path) { $dbusmenu=undef; warn "AppIndicator: can't get the menu path of the tray icon : $@"; return }
-			$dbusmenu= GMB::AppIndicator::Dbusmenu::Server->new($path);
-			$dbusmenu->set_root( GMB::AppIndicator::DbusmenuGtk3::gtk_parse_menu_structure($menu) ) if $menu;
-		});
 }
 
 #touchpads send lots of small deltas, so only change the volume once per mouse wheel notch (120)
@@ -138,6 +104,45 @@ sub MiddleClickEntry
 {	my ($entry)= grep $_->{id} && $_->{id} eq $::Options{TrayMiddleClick}, $menu ? $menu->get_children : ();
 	return $entry;
 }
+
+#### glib library only : left click, middle click and the menu exported as dbusmenu
+
+sub InitGlib
+{	my $actions= GMB::AppIndicator::Gio::SimpleActionGroup->new;
+	my $middleclick= GMB::AppIndicator::Gio::SimpleAction->new('middleclick',undef);
+	$middleclick->signal_connect(activate => sub { my $entry=MiddleClickEntry(); $entry->activate if $entry; });
+	$actions->insert($middleclick);
+	$indicator->set_actions($actions);
+	$indicator->set_menu(GMB::AppIndicator::Gio::Menu->new); #the library requires one, the real menu is the dbusmenu
+	$indicator->set_secondary_activate_target('middleclick');
+	$indicator->signal_connect(activate => sub { ::ShowHide() });
+	$indicator->signal_connect(connection_changed => sub { ExportDbusmenu() if $_[1] });
+}
+
+#the dbusmenu has to be on the path of the item's Menu property, the item is found in the watcher's list by our bus name
+sub ExportDbusmenu
+{	return if defined $dbusmenu;	#exported or pending
+	my $bus= GMB::AppIndicator::Gio::bus_get_sync('session', undef);
+	my $me= $bus->get_unique_name;
+	my $items= eval
+	{	my $r= $bus->call_sync('org.kde.StatusNotifierWatcher','/StatusNotifierWatcher','org.freedesktop.DBus.Properties','Get',
+			Glib::Variant->new('(ss)',['org.kde.StatusNotifierWatcher','RegisteredStatusNotifierItems']), undef, 'none', 1000, undef);
+		$r->get_child_value(0)->get_variant->get('as');
+	};
+	my ($item)= grep m#^\Q$me\E/#, @{ $items||[] };
+	return warn "AppIndicator: tray icon not found in the StatusNotifierWatcher list, its menu won't work\n" unless $item;
+	$dbusmenu=0;
+	#async, a blocking call to ourselves would deadlock as our main loop has to answer it
+	$bus->call($me, substr($item,length $me), 'org.freedesktop.DBus.Properties','Get',
+		Glib::Variant->new('(ss)',['org.kde.StatusNotifierItem','Menu']), undef, 'none', 1000, undef, sub
+		{	my $path= eval { $bus->call_finish($_[1])->get_child_value(0)->get_variant->get('o') };
+			unless ($path) { $dbusmenu=undef; warn "AppIndicator: can't get the menu path of the tray icon : $@"; return }
+			$dbusmenu= GMB::AppIndicator::Dbusmenu::Server->new($path);
+			$dbusmenu->set_root( GMB::AppIndicator::DbusmenuGtk3::gtk_parse_menu_structure($menu) ) if $menu;
+		});
+}
+
+####
 
 #doesn't work, needs gmb to switch the standard icon system first #2TO3 could it work now ?
 sub UpdateIcon
