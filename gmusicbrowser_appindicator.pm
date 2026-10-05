@@ -7,25 +7,39 @@
 # published by the Free Software Foundation
 
 #StatusNotifierItem tray icon, used by the "Show tray icon" option when the desktop provides a StatusNotifierWatcher
-#requires gir AyatanaAppIndicator3-0.1 (gir1.2-ayatanaappindicator3-0.1 libayatana-appindicator-gtk3)
+#uses gir AyatanaAppIndicatorGlib-2.0 + Dbusmenu-0.4 + DbusmenuGtk3-0.4 (left click shows/hides the window) if available,
+#else AyatanaAppIndicator3-0.1 (gir1.2-ayatanaappindicator3-0.1 libayatana-appindicator-gtk3)
 
 package GMB::AppIndicator;
 use strict;
 use warnings;
 
-my ($indicator,$iconpath);
+my ($indicator,$iconpath,$menu,$dbusmenu);
+
+Glib::Object::Introspection->setup(basename=>'Gio', version=>'2.0', package=>'GMB::AppIndicator::Gio');
+
+#libayatana-appindicator-glib supports left click, but exports its menu only as org.gtk.Menus, which plasma doesn't read,
+#so with it the menu is also exported as com.canonical.dbusmenu using libdbusmenu, like the older libraries do
+my $glib= eval
+{	Glib::Object::Introspection->setup(basename=>'Dbusmenu', version=>'0.4', package=>'GMB::AppIndicator::Dbusmenu');
+	Glib::Object::Introspection->setup(basename=>'DbusmenuGtk3', version=>'0.4', package=>'GMB::AppIndicator::DbusmenuGtk3');
+	Glib::Object::Introspection->setup(basename=>'AyatanaAppIndicatorGlib', version=>'2.0', package=>'AppIndicator');
+	1;
+};
 
 #canonical's libappindicator is gone from most distros, the ayatana fork provides the same api under a different gir namespace
-my $found;
+my $found= $glib;
 for my $ns (qw/AyatanaAppIndicator3 AppIndicator3/)
-{	eval { Glib::Object::Introspection->setup( basename => $ns, version => '0.1', package => 'AppIndicator'); 1} and do { $found=$ns; last };
+{	last if $found;
+	eval { Glib::Object::Introspection->setup( basename => $ns, version => '0.1', package => 'AppIndicator'); 1} and $found=$ns;
 }
-die "no typelib found for AyatanaAppIndicator3-0.1 or AppIndicator3-0.1\n" unless $found;
+die "no typelib found for AyatanaAppIndicatorGlib-2.0, AyatanaAppIndicator3-0.1 or AppIndicator3-0.1\n" unless $found;
 
 sub Start
 {	if (!$indicator)
 	{	$indicator= AppIndicator::Indicator->new(::PROGRAM_NAME,'gmusicbrowser','application-status');
 		$indicator->signal_connect(scroll_event => \&Scroll);
+		InitGlib() if $glib;
 	}
 	# events that requires updating the traymenu :
 	::Watch($indicator, $_=> \&QueueUpdate) for qw/Lock Playing Windows/;
@@ -35,8 +49,44 @@ sub Start
 sub Stop
 {	delete $::ToDo{'2_AppIndicator'}; #a queued Update would make it active again
 	::UnWatch_all($indicator);
-	if (my $menu=$indicator->get_menu) { $menu->destroy }	#no menu if stopped before the first Update
+	if ($glib) { $menu->destroy if $menu; $menu=undef }
+	elsif (my $m=$indicator->get_menu) { $m->destroy }	#no menu if stopped before the first Update
 	$indicator->set_status('passive'); #can't find how to destroy it, so hide it and reuse it if reactivated
+}
+
+sub InitGlib
+{	my $actions= GMB::AppIndicator::Gio::SimpleActionGroup->new;
+	my $middleclick= GMB::AppIndicator::Gio::SimpleAction->new('middleclick',undef);
+	$middleclick->signal_connect(activate => sub { my $entry=MiddleClickEntry(); $entry->activate if $entry; });
+	$actions->insert($middleclick);
+	$indicator->set_actions($actions);
+	$indicator->set_menu(GMB::AppIndicator::Gio::Menu->new); #the library requires one, the real menu is the dbusmenu
+	$indicator->set_secondary_activate_target('middleclick');
+	$indicator->signal_connect(activate => sub { ::ShowHide() });
+	$indicator->signal_connect(connection_changed => sub { ExportDbusmenu() if $_[1] });
+}
+
+#the dbusmenu has to be on the path of the item's Menu property, the item is found in the watcher's list by our bus name
+sub ExportDbusmenu
+{	return if defined $dbusmenu;	#exported or pending
+	my $bus= GMB::AppIndicator::Gio::bus_get_sync('session', undef);
+	my $me= $bus->get_unique_name;
+	my $items= eval
+	{	my $r= $bus->call_sync('org.kde.StatusNotifierWatcher','/StatusNotifierWatcher','org.freedesktop.DBus.Properties','Get',
+			Glib::Variant->new('(ss)',['org.kde.StatusNotifierWatcher','RegisteredStatusNotifierItems']), undef, 'none', 1000, undef);
+		$r->get_child_value(0)->get_variant->get('as');
+	};
+	my ($item)= grep m#^\Q$me\E/#, @{ $items||[] };
+	return warn "AppIndicator: tray icon not found in the StatusNotifierWatcher list, its menu won't work\n" unless $item;
+	$dbusmenu=0;
+	#async, a blocking call to ourselves would deadlock as our main loop has to answer it
+	$bus->call($me, substr($item,length $me), 'org.freedesktop.DBus.Properties','Get',
+		Glib::Variant->new('(ss)',['org.kde.StatusNotifierItem','Menu']), undef, 'none', 1000, undef, sub
+		{	my $path= eval { $bus->call_finish($_[1])->get_child_value(0)->get_variant->get('o') };
+			unless ($path) { $dbusmenu=undef; warn "AppIndicator: can't get the menu path of the tray icon : $@"; return }
+			$dbusmenu= GMB::AppIndicator::Dbusmenu::Server->new($path);
+			$dbusmenu->set_root( GMB::AppIndicator::DbusmenuGtk3::gtk_parse_menu_structure($menu) ) if $menu;
+		});
 }
 
 #touchpads send lots of small deltas, so only change the volume once per mouse wheel notch (120)
@@ -44,6 +94,7 @@ my $scrolled=0;
 my $inverted= ($ENV{XDG_CURRENT_DESKTOP}//'')=~m/KDE/; #plasma sends Qt's wheel delta (positive=up), the library assumes positive=down
 sub Scroll
 {	my (undef,$delta,$dir)=@_;
+	$dir= (qw/up down left right smooth/)[$dir] if $dir=~m/^\d+$/; #the glib library passes the GdkScrollDirection as a number
 	return unless $dir eq 'up' || $dir eq 'down';
 	$dir= $dir eq 'up' ? 'down' : 'up' if $inverted;
 	$scrolled+= $dir eq 'up' ? $delta : -$delta;
@@ -52,11 +103,9 @@ sub Scroll
 }
 
 #true if a StatusNotifierWatcher owns its name on the session bus, ie the desktop can show this icon
-my $gio;
 sub WatcherPresent
 {	my $has= eval
-	{	$gio ||= do { Glib::Object::Introspection->setup(basename=>'Gio', version=>'2.0', package=>'GMB::AppIndicator::Gio'); 1 };
-		my $bus= GMB::AppIndicator::Gio::bus_get_sync('session', undef);
+	{	my $bus= GMB::AppIndicator::Gio::bus_get_sync('session', undef);
 		my $r= $bus->call_sync('org.freedesktop.DBus','/org/freedesktop/DBus','org.freedesktop.DBus','NameHasOwner',
 			Glib::Variant->new('(s)',['org.kde.StatusNotifierWatcher']), Glib::VariantType->new('(b)'), 'none', 1000, undef);
 		$r->get('(b)')->[0];
@@ -71,12 +120,23 @@ sub QueueUpdate
 sub Update
 {	delete $::ToDo{'2_AppIndicator'};
 	return unless $indicator;
-	my $menu= ::BuildMenu(\@::TrayMenu);
+	my $old= $menu;
+	$menu= ::BuildMenu(\@::TrayMenu);
 	$menu->show_all;
 	$indicator->set_status('active');
-	$indicator->set_menu($menu);
-	my ($menuentry)= grep $_->{id} && $_->{id} eq $::Options{TrayMiddleClick}, $menu->get_children;
-	$indicator->set_secondary_activate_target($menuentry) if $menuentry;
+	if ($glib)
+	{	$dbusmenu->set_root( GMB::AppIndicator::DbusmenuGtk3::gtk_parse_menu_structure($menu) ) if $dbusmenu;
+		$old->destroy if $old;
+	}
+	else
+	{	$indicator->set_menu($menu);
+		my $entry= MiddleClickEntry();
+		$indicator->set_secondary_activate_target($entry) if $entry;
+	}
+}
+sub MiddleClickEntry
+{	my ($entry)= grep $_->{id} && $_->{id} eq $::Options{TrayMiddleClick}, $menu ? $menu->get_children : ();
+	return $entry;
 }
 
 #doesn't work, needs gmb to switch the standard icon system first #2TO3 could it work now ?
