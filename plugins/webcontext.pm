@@ -11,18 +11,17 @@ name	Web context
 title	Web context plugin
 desc	Provides context views using WebKit
 desc	wikipedia, lyrics, and custom webpages
-req	gir(WebKit2-4.0, gir1.2-webkit2-4.0 webkit2gtk3)
+req	gir(WebKit2-4.0, gir1.2-webkit2-4.1 webkit2gtk3)
 =cut
 
 use strict;
 use warnings;
 use utf8::all;
 
-Glib::Object::Introspection->setup(basename => 'WebKit2', version => '4.0', package => 'WebKit2');
+Glib::Object::Introspection->setup(basename => 'WebKit2', version => '4.1', package => 'WebKit2');
 push @GMB::Plugin::WebContext::ISA, 'GMB::Plugin::WebContext::WebKit';
 
 WebKit2::WebContext->get_default->get_cookie_manager->set_persistent_storage($::HomeDir.'cookies','sqlite'); #or 'text' ? #add option to disable saving cookies ?
-
 
 package GMB::Plugin::WebContext::WebKit;
 
