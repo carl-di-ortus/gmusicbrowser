@@ -2598,14 +2598,6 @@ sub update_mime
 	$self->{mime_entry}->set_text($self->{mime});
 }
 
-#sub _identify_pictype	#used only if $Gtk2::VERSION < 1.092  #no longer used
-#{	$_[0]=~m/^\xff\xd8\xff\xe0..JFIF\x00/s && return ('jpg','image/jpeg');
-#	$_[0]=~m/^\x89PNG\x0D\x0A\x1A\x0A/ && return ('png','image/png');
-#	$_[0]=~m/^GIF8[79]a/ && return ('gif','image/gif');
-#	$_[0]=~m/^BM/ && return ('bmp','image/bmp');
-#	return ('','');
-#}
-
 package EntryLyrics;
 use base 'Gtk3::Button';
 

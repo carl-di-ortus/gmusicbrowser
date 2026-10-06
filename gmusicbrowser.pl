@@ -59,10 +59,6 @@ sub Load_Wnck
 }
 
 {no warnings 'redefine';
-  # fix for binding not handling gdk_pixbuf_loader_write properly prior to Glib::Object::Introspection::VERSION 0.049
-  *Gtk3::Gdk::PixbufLoader::write= sub { return Glib::Object::Introspection->invoke( 'GdkPixbuf', 'PixbufLoader', 'write', $_[0], [unpack 'C*', $_[1]] ); }
-	if $Glib::Object::Introspection::VERSION<0.049;
-
   sub Gtk3::ComboBox::get_active_iter
   {	my ($ok,$iter)= Glib::Object::Introspection->invoke( 'Gtk', 'ComboBox', 'get_active_iter', $_[0]);
 	return $ok ? $iter : undef;
@@ -126,12 +122,6 @@ use Encode qw/_utf8_on _utf8_off/;
  # alternate names for some functions that were, once upon a time, not provided by Glib
  *filename_to_utf8displayname=\&Glib::filename_display_name if *Glib::filename_display_name{CODE};
  *PangoEsc=\&Glib::Markup::escape_text if *Glib::Markup::escape_text{CODE};
- if (eval($POSIX::VERSION)<1.18) #previously, date strings returned by strftime needed to be decoded by the locale encoding   # maybe too old to care about these versions ?
- {	my ($encoding)= setlocale(LC_TIME)=~m#\.([^@]+)#;
-	$encoding='cp'.$encoding if $^O eq 'MSWin32' && $encoding=~m/^\d+$/;
-	if (!Encode::resolve_alias($encoding)) {warn "Can't find dates encoding used for dates, (LC_TIME=".setlocale(LC_TIME)."), dates may have wrong encoding\n";$encoding=undef}
-	*strftime_utf8= sub { $encoding ? Encode::decode($encoding, &strftime) : &strftime; };
- }
 }
 use List::Util qw/min max sum first/;
 use File::Copy;
@@ -142,7 +132,6 @@ use Carp;
 $SIG{INT} = sub {&Carp::cluck; exit 2};
 $SIG{CHLD}= 'IGNORE'; # to get rid of zombie child processes
 
-#use constant SLASH => ($^O  eq 'MSWin32')? '\\' : '/';
 use constant SLASH => '/'; #gtk file chooser use '/' in win32 and perl accepts both '/' and '\'
 
 # Find dir containing other files (*.pm & pix/) -> $DATADIR
@@ -161,8 +150,8 @@ use constant
 {
  TRUE  => 1,
  FALSE => 0,
- VERSION => '1.109901',
- VERSIONSTRING => '1.1.99.1',
+ VERSION => '1.109905',
+ VERSIONSTRING => '1.1.99.5',
  PIXPATH => $DATADIR.SLASH.'pix'.SLASH,
  PROGRAM_NAME => 'gmusicbrowser',
 
@@ -194,7 +183,6 @@ BEGIN
  if ($@)
  {	eval {require Locale::gettext};
 	if ($@) { warn "neither Locale::Messages, nor Locale::gettext found -> no translations\n"; }
-	elsif ($Locale::gettext::VERSION<1.04) { warn "Needs at least version 1.04 of Locale::gettext, v$Locale::gettext::VERSION found -> no translations\n" }
 	else
 	{	warn "Locale::Messages not found, using Locale::gettext instead\n" if $::debug;
 		my $d= eval { Locale::gettext->domain($domain); };
@@ -1836,13 +1824,10 @@ my $gnomeclient;
 if ($CmdLine{UseGnomeSession})
 { eval		# use the gnome libraries, if present, to enable some session management
   {	require Gnome2;
-	#my $application=Gnome2::Program->init(PROGRAM_NAME, VERSION, 'libgnomeui');
 	my $application=Gnome2::Program->init(PROGRAM_NAME, VERSION);
 	$gnomeclient=Gnome2::Client->master();
 	$gnomeclient->signal_connect('die' => sub { Gtk3->main_quit; });
 	$gnomeclient->signal_connect(save_yourself => sub { SaveTags(); return 1 });
-	#$gnomeclient->set_restart_command($0,'-C',$SaveFile); #FIXME
-	#$gnomeclient->set_restart_style('if-running');
   };
   if ($@) {warn "Error loading Gnome2.pm => can't use gnome-session :\n $@\n"}
 }
@@ -2455,8 +2440,7 @@ sub ReadOldSavedTags
 	Post_Options_init();
 
 	my $oldID=-1;
-	no warnings 'utf8'; # to prevent 'utf8 "\xE9" does not map to Unicode' type warnings about path and file which are stored as they are on the filesystem #FIXME find a better way to read lines containing both utf8 and unknown encoding
-	my ($loadsong)=Songs::MakeLoadSub({},split / /,$Songs::OLD_FIELDS);
+	my ($loadsong)=Songs::MakeLoadSub({},0,split / /,$Songs::OLD_FIELDS);
 	my (%IDforAlbum,%IDforArtist);
 	my @newIDs; SongArray::start_init();
 	my $lengthcheck=SongArray->new;
@@ -2591,13 +2575,14 @@ sub ReadSavedTags	#load tags _and_ settings
 			return;
 		}
 	}
-	warn "Reading saved tags in $loadfile ...\n";
+	print "Reading saved tags in $loadfile ...\n";
 	$SaveFile.=$1 if $loadfile=~m#($gmbrc_ext_re)# && $SaveFile!~m#$gmbrc_ext_re#; # will use .gz/.xz to save if read from a .gz/.xz gmbrc
 
 	setlocale(LC_NUMERIC, 'C');  # so that '.' is used as a decimal separator when converting numbers into strings
 	# read first line to determine if old version, version >1.1.7 stars with "# gmbrc version=",  version <1.1 starts with a letter, else it's version<=1.1.7 (starts with blank or # (for comments) or [ (section name))
 	my $firstline=<$fh>;
 	unless (defined $firstline) { die "Can't read '$loadfile', aborting...\n" }
+	my $filenames_utf8= $firstline=~m/\bfilenames=utf8\b/;
 	my $oldversion;
 	if ($firstline=~m/^#?\s*gmbrc version=(\d+\.\d+)/) { $oldversion=$1 }
 	elsif ($ext) { die "Can't find gmbrc header in '$loadfile', aborting...\n" }	# compressed gmbrc not supported with old versions, because can't seek backward in compressed fh
@@ -2648,7 +2633,7 @@ sub ReadSavedTags	#load tags _and_ settings
 
 		my $songs=$lines{Songs};
 		my $fields=shift @$songs;
-		my ($loadsong,$extra_sub)=Songs::MakeLoadSub(\%lines,split /\t/,$fields);
+		my ($loadsong,$extra_sub)=Songs::MakeLoadSub(\%lines,$filenames_utf8,split /\t/,$fields);
 		my @newIDs;
 		while (my $line=shift @$songs)
 		{	my ($oldID,@vals)= split /\t/, $line,-1;
@@ -2714,7 +2699,7 @@ sub ReadSavedTags	#load tags _and_ settings
 	&launchIdleLoop;
 
 	setlocale(LC_NUMERIC, '');
-	warn "Reading saved tags in $loadfile ... done\n";
+	print "Reading saved tags in $loadfile ... done\n";
 	Post_ReadSavedTags();
 }
 sub Post_Options_init
@@ -2830,9 +2815,9 @@ sub SaveTags	#save tags _and_ settings
 	my $error;
 	(my$fh,my$tempfile,$ext)= Open_gmbrc("$SaveFile.new.$$"."$ext",1);
 	unless ($fh) { warn "Save aborted\n"; POSIX::_exit(0) if $fork; return; }
-	warn "Writing tags in $SaveFile$ext ...\n" if $Verbose || !$fork;
+	print "Writing tags in $SaveFile$ext ...\n" if $Verbose || !$fork;
 
-	print $fh "# gmbrc version=".VERSION." time=".time."\n"  or $error||=$!;
+	print $fh "# gmbrc version=".VERSION." time=".time." filenames=utf8\n"  or $error||=$!;
 
 	my $optionslines=SaveRefToLines(\%Options);
 	print $fh "[Options]\n$$optionslines\n"  or $error||=$!;
@@ -2897,7 +2882,7 @@ sub SaveTags	#save tags _and_ settings
 		unlink $_ for find_gmbrc_file($SaveFile); #make sure there is no other old gmbrc without .bak, as they could cause confusion
 	}
 	rename $tempfile,$SaveFile.$ext  or warn $!;
-	warn "Writing tags in $SaveFile$ext ... done\n" if $Verbose || !$fork;
+	print "Writing tags in $SaveFile$ext ... done\n" if $Verbose || !$fork;
 	POSIX::_exit(0) if $fork;
 }
 
@@ -6084,6 +6069,7 @@ sub Uris_to_IDs
 
 sub FolderToIDs
 {	my ($add,$recurse,@dirs)=@_;
+	_utf8_off($_) for @dirs;
 	s#^file://## for @dirs;
 	@dirs= map cleanpath($_), @dirs;
 	my @files;
@@ -6092,12 +6078,12 @@ sub FolderToIDs
 	while (defined(my $dir=shift @dirs))
 	{	if (-d $dir)
 		{	# make sure it doesn't look in the same dir twice due to symlinks
-			my $real= -l $dir ? simplify_path(rel2abs(readlink($dir),parentdir($dir))) : $dir;
+			my $real= -l $dir ? simplify_path(rel2abs(CORE::readlink($dir),parentdir($dir))) : $dir;
 			next if exists $followeddirs{$real};
 			$followeddirs{$real}=undef;
 
 			if (opendir my($DIRH),$dir)
-			{	my @list= map $dir.SLASH.$_, grep !m#^\.#, readdir $DIRH;
+			{	my @list= map $dir.SLASH.$_, grep !m#^\.#, CORE::readdir $DIRH;
 				closedir $DIRH;
 				push @files, grep -f && m/$ScanRegex/, @list;
 				push @dirs, grep -d, @list   if $recurse;
@@ -6142,6 +6128,7 @@ sub MakeScanRegex
 sub ScanFolder
 {	warn "Scanning : @_\n" if $Verbose;
 	my $dir=$_[0];
+	_utf8_off($dir);
 	$dir=~s#^file://##;
 	$dir=cleanpath($dir);
 	MakeScanRegex() unless $ScanRegex;
@@ -6151,7 +6138,7 @@ sub ScanFolder
 	my @files;
 	if (-d $dir)
 	{	if (opendir my($DIRH),$dir)
-		{	@files=readdir $DIRH;
+		{	@files=CORE::readdir $DIRH;
 			closedir $DIRH;
 		}
 		else { warn "ScanFolder: can't open folder $dir : $!\n"; return }
@@ -6169,7 +6156,7 @@ sub ScanFolder
 		if (-d $path_file)
 		{	#next if $notrecursive;
 			# make sure it doesn't look in the same dir twice due to symlinks
-			my $real= -l $path_file ? simplify_path(rel2abs(readlink($path_file),$dir)) : $path_file;
+			my $real= -l $path_file ? simplify_path(rel2abs(CORE::readlink($path_file),$dir)) : $path_file;
 			next if exists $FollowedDirs{$real};
 			$FollowedDirs{$real}=undef;
 			push @ToScan,$path_file;
@@ -6349,12 +6336,11 @@ sub AutoSelPicture
 sub AboutDialog
 {	my $dialog=Gtk3::AboutDialog->new;
 	$dialog->set_version(VERSIONSTRING);
-	$dialog->set_copyright("Copyright © 2005-2020 Quentin Sculo");
+	$dialog->set_copyright("Copyright © 2005-2020 Quentin Sculo\nCopyright © 2024-2026 Carl di Ortus");
 	$dialog->set_logo_icon_name('gmusicbrowser');
-	#$dialog->set_comments();
 	$dialog->set_license("Released under the GNU General Public Licence version 3\n(http://www.gnu.org/copyleft/gpl.html)");
 	$dialog->set_website('http://gmusicbrowser.org');
-	$dialog->set_authors(['Quentin Sculo <squentin@free.fr>']);
+	$dialog->set_authors(['Quentin Sculo <squentin@free.fr>','Carl di Ortus <reklamukibiras@gmail.com>']);
 	$dialog->set_artists([ sort
 		"svg icon : zeltak",
 		"tango icon theme : Jean-Philippe Guillemin",
