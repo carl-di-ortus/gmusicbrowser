@@ -1,3 +1,13 @@
+gmusicbrowser (1.1.99.6) forky; urgency=low
+
+  * Saved libraries now store filenames and cover paths as readable UTF-8, with
+    `filenames=utf8` in the gmbrc header. Existing percent-escaped libraries are
+    still read and are converted on the next save. Filenames containing invalid
+    UTF-8 bytes retain a lossless escaped representation. Older releases do not
+    understand the new format's literal percent signs; use a backup when downgrading.
+
+ -- Carl di Ortus <reklamukibiras@gmail.com>  Fri, 06 Oct 2026 22:17:00 +0300
+ 
 gmusicbrowser (1.1.99.5) forky; urgency=low
 
   * Saved libraries now store filenames and cover paths as readable UTF-8, with
