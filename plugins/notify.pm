@@ -39,8 +39,8 @@ sub Start
 	$notify->set_urgency('low');
 	$notify->set_hint('transient', Glib::Variant->new_boolean(1));	#don't keep song notifications in the daemon's history
 	#$notify->set_category('music'); #is there a standard category for that ?
-	my ($name, $vendor, $version, $spec_version)= Notify::get_server_info();
-	$Daemon_name= "$name $version ($vendor)";
+	my ($ok, $name, $vendor, $version, $spec_version)= Notify::get_server_info();
+	$Daemon_name= $ok ? "$name $version ($vendor)" : _"None";
 	my @caps = Notify::get_server_caps();
 	$can_body=	grep $_ eq 'body',	@caps;
 	$can_actions=	grep $_ eq 'actions',	@caps;
