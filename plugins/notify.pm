@@ -113,9 +113,18 @@ sub Changed
 	else				{ warn "Notify plugin : $@"; }
 }
 
+sub ShowMainWindow
+{	my $notification=shift;
+	::ShowHide(1);
+	#on wayland the window only gets the focus with the activation token of the click, set_startup_id passes it on
+	my $token= $notification->can('get_activation_token') && $notification->get_activation_token;
+	$::MainWindow->set_startup_id($token) if $token;
+}
+
 sub set_actions
 {	return unless $can_actions;
 	$notify->clear_actions;
+	$notify->add_action('default',_"Show",\&ShowMainWindow);	#clicking the notification
 	if ($::Options{OPT.'actions'})
 	{	$notify->add_action('media-skip-backward',_"Previous",\&::PrevSong);
 		$notify->add_action($::TogPlay ? ('media-playback-pause',_"Pause") : ('media-playback-start',_"Play"), \&::PlayPause);
