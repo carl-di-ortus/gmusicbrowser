@@ -24,6 +24,7 @@ use constant
 
 my $notify;
 my $last_shown=0;
+my $paused_ID;	#to recognize a resume from pause
 my ($Daemon_name,$can_actions,$can_body);
 
 Glib::Object::Introspection->setup( basename => 'Notify', version => '0.7', package => 'Notify',
@@ -45,7 +46,8 @@ sub Start
 	$can_body=	grep $_ eq 'body',	@caps;
 	$can_actions=	grep $_ eq 'actions',	@caps;
 	set_actions();
-	::Watch($notify,'PlayingSong',\&Changed);
+	::Watch($notify,'PlayingSong',\&SongStarted);
+	::Watch($notify,'Playing',\&PlayingChanged);
 	$::Command{PopupNotify}=[\&Changed,_"Popup notify window"];
 }
 sub Stop
@@ -70,8 +72,20 @@ sub prefbox
 	$body->set_sensitive($can_body);
 	$body->set_tooltip_text(_("Body text is not supported by current notification daemon").' : '.$Daemon_name) unless $can_body;
 	my $whenhidden=::NewPrefCheckButton(OPT.'onlywhenhidden',_"Don't notify if the main window is visible");
-	$vbox->pack_start($_,::FALSE,::FALSE,2) for $summary,$body,$size,$timeout,$actions,$whenhidden;
+	my $onresume=::NewPrefCheckButton(OPT.'onresume',_"Notify when resuming from pause");
+	$vbox->pack_start($_,::FALSE,::FALSE,2) for $summary,$body,$size,$timeout,$actions,$whenhidden,$onresume;
 	return $vbox;
+}
+
+sub PlayingChanged
+{	if (!defined $::TogPlay)	{ $paused_ID=undef }	#stopped
+	elsif (!$::TogPlay)		{ $paused_ID=$::SongID }	#paused
+}
+
+sub SongStarted
+{	my $resumed= defined $paused_ID && $paused_ID==$::SongID;
+	$paused_ID=undef;
+	Changed() unless $resumed && !$::Options{OPT.'onresume'};
 }
 
 sub Changed
