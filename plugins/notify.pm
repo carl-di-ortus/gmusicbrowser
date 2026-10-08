@@ -66,7 +66,7 @@ sub prefbox
 	my $body=   ::NewPrefEntry(OPT.'text', _"Body :",    sizeg1=> $sg1, sizeg2=>$sg2, width=>40, tip => $replacetext."\n\n"._("You can use some markup, eg :\n<b>bold</b> <i>italic</i> <u>underline</u>\nNote that the markup may be ignored by the notification daemon"),);
 	my $size=   ::NewPrefSpinButton(OPT.'picsize', 0,1000, step=>10, page=>40, text=>_"Picture size : %d", sizeg1=>$sg1, tip=> _"Note that some notification daemons resize the displayed picture");
 	my $timeout=::NewPrefSpinButton(OPT.'timeout', 0,9999, step=>2,  page=>5,  text=>_"Timeout : %d seconds", sizeg1=>$sg1, digits=>1);
-	my $actions=::NewPrefCheckButton(OPT.'actions',_"Display previous, play/pause and next actions");
+	my $actions=::NewPrefCheckButton(OPT.'actions',_"Display previous, pause and next actions");
 	$actions->set_sensitive($can_actions);
 	$actions->set_tooltip_text(_("Actions are not supported by current notification daemon").' : '.$Daemon_name) unless $can_actions;
 	$body->set_sensitive($can_body);
@@ -108,7 +108,7 @@ sub Changed
 	$notify->set_timeout($timeout);
 	#replacing a timed out notification can update it silently without a popup (plasma keeps it in its history)
 	$notify->set_property(id=>0) unless $timeout==0 || Time::HiRes::time()-$last_shown < $timeout/1000;
-	set_actions();	#play/pause label depends on the current state
+	set_actions();	#the pause action depends on the playing state
 	if (eval { $notify->show; 1 })	{ $last_shown= Time::HiRes::time(); }
 	else				{ warn "Notify plugin : $@"; }
 }
@@ -127,7 +127,7 @@ sub set_actions
 	$notify->add_action('default',_"Show",\&ShowMainWindow);	#clicking the notification
 	if ($::Options{OPT.'actions'})
 	{	$notify->add_action('media-skip-backward',_"Previous",\&::PrevSong);
-		$notify->add_action($::TogPlay ? ('media-playback-pause',_"Pause") : ('media-playback-start',_"Play"), \&::PlayPause);
+		$notify->add_action('media-playback-pause',_"Pause",\&::Pause) if $::TogPlay;
 		$notify->add_action('media-skip-forward',_"Next",\&::NextSong);
 	}
 }
