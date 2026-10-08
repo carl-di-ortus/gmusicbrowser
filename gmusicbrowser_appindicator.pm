@@ -45,6 +45,8 @@ sub Start
 	# events that requires updating the traymenu :
 	::Watch($indicator, $_=> \&QueueUpdate) for qw/Lock Playing Windows/;
 	#::Watch($indicator, $_=> \&UpdateIcon) for qw/Playing Icons/; #FIXME needs initialization #deactivated because it can't work for now
+	::Watch($indicator, CurSong=> \&UpdateTooltip);
+	UpdateTooltip();
 	QueueUpdate();
 }
 sub Stop
@@ -98,6 +100,18 @@ sub Update
 	{	$indicator->set_menu($menu);
 		my $entry= MiddleClickEntry();
 		$indicator->set_secondary_activate_target($entry) if $entry;
+	}
+}
+#plain text, hosts disagree on markup
+sub UpdateTooltip
+{	my $ID=$::SongID;
+	if ($glib)
+	{	return unless $indicator->can('set_tooltip');
+		my ($title,$desc)= defined $ID ? (::ReplaceFields($ID,'%S'), ::ReplaceFields($ID,"%a\n%l")) : (::PROGRAM_NAME,'');
+		$indicator->set_tooltip('',$title,$desc);	#an undef description would clear the title too
+	}
+	elsif ($indicator->can('set_title')) #used as tooltip by hosts when there is no tooltip api
+	{	$indicator->set_title( defined $ID ? ::ReplaceFields($ID,'%S - %a') : ::PROGRAM_NAME );
 	}
 }
 sub MiddleClickEntry
