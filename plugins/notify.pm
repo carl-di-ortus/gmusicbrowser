@@ -15,6 +15,7 @@ req	gir(Notify-0.7, gir1.2-notify-0.7 libnotify-0.7)
 package GMB::Plugin::NOTIFY;
 use strict;
 use warnings;
+use Time::HiRes ();
 use constant
 {	OPT	=> 'PLUGIN_NOTIFY_',
 };
@@ -22,6 +23,7 @@ use constant
 ::SetDefaultOptions(OPT, title => "%S", text => _"<i>by</i> %a\\n<i>from</i> %l", picsize => 50, timeout=>5);
 
 my $notify;
+my $last_shown=0;
 my ($Daemon_name,$can_actions,$can_body);
 
 Glib::Object::Introspection->setup( basename => 'Notify', version => '0.7', package => 'Notify',
@@ -87,7 +89,10 @@ sub Changed
 	$pixbuf ||= Gtk3::Gdk::Pixbuf->new_from_xpm_data('1 1 1 1','a c none','a'); #1x1 transparent pixbuf to remove previous pixbuf
 	$notify->set_image_from_pixbuf($pixbuf);
 	$notify->set_timeout($timeout);
+	#replacing a timed out notification can update it silently without a popup (plasma keeps it in its history)
+	$notify->set_property(id=>0) unless $timeout==0 || Time::HiRes::time()-$last_shown < $timeout/1000;
 	$notify->show;
+	$last_shown= Time::HiRes::time();
 	set_actions();
 }
 
