@@ -93,8 +93,8 @@ sub Changed
 	$notify->set_timeout($timeout);
 	#replacing a timed out notification can update it silently without a popup (plasma keeps it in its history)
 	$notify->set_property(id=>0) unless $timeout==0 || Time::HiRes::time()-$last_shown < $timeout/1000;
-	$notify->show;
-	$last_shown= Time::HiRes::time();
+	if (eval { $notify->show; 1 })	{ $last_shown= Time::HiRes::time(); }
+	else				{ warn "Notify plugin : $@"; }
 	set_actions();
 }
 
