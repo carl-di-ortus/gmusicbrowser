@@ -32,6 +32,7 @@ Glib::Object::Introspection->setup( basename => 'Notify', version => '0.7', pack
 
 sub Init
 {	Notify::init(::PROGRAM_NAME);
+	Notify::set_app_icon('gmusicbrowser') if defined &Notify::set_app_icon;	#libnotify >= 0.8.4
 }
 
 sub Start
