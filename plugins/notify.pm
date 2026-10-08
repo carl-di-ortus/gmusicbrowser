@@ -50,6 +50,7 @@ sub Start
 }
 sub Stop
 {	::UnWatch_all($notify);
+	eval { $notify->close } if $notify->get('id');	#remove the popup if still shown, dies if it's gone already
 	$notify=undef;
 	delete $::Command{PopupNotify};
 }
