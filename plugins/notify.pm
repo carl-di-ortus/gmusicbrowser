@@ -88,8 +88,8 @@ sub Changed
 	{	my $album_gid= Songs::Get_gid($ID,'album');
 		$pixbuf=AAPicture::pixbuf('album', $album_gid, $size, 1);
 	}
-	$pixbuf ||= Gtk3::Gdk::Pixbuf->new_from_xpm_data('1 1 1 1','a c none','a'); #1x1 transparent pixbuf to remove previous pixbuf
-	$notify->set_image_from_pixbuf($pixbuf);
+	if ($pixbuf)	{ $notify->set_image_from_pixbuf($pixbuf) }
+	else		{ $notify->set_hint('image-data',undef) }	#remove previous picture, set_image_from_pixbuf doesn't accept undef
 	$notify->set_timeout($timeout);
 	#replacing a timed out notification can update it silently without a popup (plasma keeps it in its history)
 	$notify->set_property(id=>0) unless $timeout==0 || Time::HiRes::time()-$last_shown < $timeout/1000;
