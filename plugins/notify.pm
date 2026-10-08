@@ -36,6 +36,7 @@ sub Init
 sub Start
 {	$notify= Notify::Notification->new('empty');
 	$notify->set_urgency('low');
+	$notify->set_hint('transient', Glib::Variant->new_boolean(1));	#don't keep song notifications in the daemon's history
 	#$notify->set_category('music'); #is there a standard category for that ?
 	my ($name, $vendor, $version, $spec_version)= Notify::get_server_info();
 	$Daemon_name= "$name $version ($vendor)";
