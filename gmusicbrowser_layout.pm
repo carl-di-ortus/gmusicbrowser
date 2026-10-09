@@ -1832,7 +1832,7 @@ sub close_window
 {	my $self=shift;
 	$self->SaveOptions;
 	unless ($self->{quitonclose}) { $_->destroy for values %{$self->{widgets}}; $self->destroy; return }
-	if ($::Options{CloseToTray}) { ::ShowHide(0); return 1}
+	if ($::Options{CloseToTray} && $::TrayIcon) { ::ShowHide(0); return 1}
 	else { &::Quit }
 }
 
@@ -2049,9 +2049,9 @@ sub new
 	$layout||=$::Options{LayoutT};
 	my $self=Layout::Window::new($class,$layout, wintype=>'popup', 'pos'=>undef, size=>undef, fallback=>'full with buttons', popped_from=>$widget);
 
-	if ($widget)	#warning : widget can be a Gtk3::StatusIcon
+	if ($widget)
 	{	::weaken( $widget->{PoppedUpWindow}=$self );
-		my $parent_layout_window= !$widget->isa('Gtk3::StatusIcon') && ::get_layout_widget($widget);
+		my $parent_layout_window= ::get_layout_widget($widget);
 		::weaken( $parent_layout_window->{PoppedUpWindow}=$self ) if $parent_layout_window;
 		$self->set_screen($widget->get_screen);
 		#$self->set_transient_for($widget->get_toplevel);
@@ -2091,10 +2091,6 @@ sub CheckCursor		# StartDestroy if popup is not ancestor of widget under cursor 
 
 	return 1 if $self->get_display->pointer_is_grabbed;	# to prevent destroying while a menu is open
 
-	if (my $sicon=$self->{popped_from})
-	{	return 1 if $sicon->isa('Gtk3::StatusIcon') && OnStatusIcon($sicon);	#check if pointer above statusicon
-	}
-	
 	my ($gdkwin)=Gtk3::Gdk::Window::at_pointer;
 	if ($gdkwin)
 	{	$gdkwin= $gdkwin->get_toplevel;
@@ -2107,14 +2103,6 @@ sub CheckCursor		# StartDestroy if popup is not ancestor of widget under cursor 
 	}
 	$self->StartDestroy;
 	return 1
-}
-
-sub OnStatusIcon	#return true if pointer is above sicon
-{	my $sicon=shift;
-	my (undef,$screen,$area)= $sicon->get_geometry;
-	my ($x,$y,$w,$h)= @$area{qw/x y width height/};
-	my ($pscreen,$px,$py)= $screen->get_display->get_pointer;
-	return $pscreen==$screen && $px>=$x && $px<=$x+$w && $py>=$y && $py<=$y+$h;
 }
 
 sub Position
@@ -2170,8 +2158,6 @@ sub _compute_pos
 sub HoverPopup
 {	my $widget=shift;
 	delete $widget->{hover_timeout};
-	return 0 if $widget->isa('Gtk3::StatusIcon') && !OnStatusIcon($widget);	# for statusicon, don't popup if no longer above icon
-	return 0 if $widget->{block_popup};
 	Popup($widget);
 	0;
 }
@@ -2183,25 +2169,17 @@ sub Popup
 	return 0 unless $self;
 	$self->CancelDestroy;
 	$self->{destroy_timeout}=Glib::Timeout->add( $addtimeout,\&DestroyNow,$self) if $addtimeout;
-	$self->{check_timeout} ||= Glib::Timeout->add(400, \&CheckCursor, $self) if $widget->isa('Gtk3::StatusIcon') && !$addtimeout;
 	0;
 }
 
 sub set_hover
 {	my $widget=$_[0];
-	if ($widget->isa('Gtk3::StatusIcon'))
-	{	$widget->set_has_tooltip(1);
-		$widget->signal_connect(query_tooltip => sub { return if $_[0]{hover_timeout}; &PreparePopup });
-	}
-	else
-	{	$widget->signal_connect(enter_notify_event => \&PreparePopup);
-		$widget->signal_connect(leave_notify_event => \&CancelPopup );
-	}
+	$widget->signal_connect(enter_notify_event => \&PreparePopup);
+	$widget->signal_connect(leave_notify_event => \&CancelPopup );
 }
 
 sub PreparePopup
-{	my $widget=shift;	#widget can be a statusicon
-	return 0 if $widget->{block_popup};
+{	my $widget=shift;
 	if (!$widget->{PoppedUpWindow})
 	{	my $delay=$widget->{hover_delay}||1000;
 		if (my $t=delete $widget->{hover_timeout})	{ Glib::Source->remove($t); }

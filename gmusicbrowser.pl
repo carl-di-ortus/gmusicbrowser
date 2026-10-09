@@ -541,12 +541,6 @@ require 'simple_http.pm';
  $TempDir= Glib::get_tmp_dir.SLASH; _utf8_off($TempDir); #turn utf8 flag off to not auto-utf8-upgrade other filenames in the same strings
 }
 
-my $TrayIconAvailable;
-BEGIN
-{ if (*Gtk3::StatusIcon::set_has_tooltip{CODE}) { $TrayIconAvailable=1; }
-  else { warn "Gtk3::StatusIcon not found, probaly deprecated -> tray icon won't be available (need to implement replacements)\n" }
-}
-
 my $IconSearchPath= ( Gtk3::IconTheme::get_default()->get_search_path )[0];
 
 our $Image_ext_re; # = qr/\.(?:jpe?g|png|gif|bmp)$/i;
@@ -1165,7 +1159,7 @@ our ($RandomMode,$SortFields,$ListMode);
 our ($SongID,$prevID,$Recent,$RecentPos,$Queue); our $QueueAction=our $NextAction='';
 our ($Position,$ChangedID,$ChangedPos,@NextSongs,$NextFileToPlay);
 our ($MainWindow,$FullscreenWindow); my $OptionsDialog;
-my $TrayIcon;
+our $TrayIcon;
 my %Editing; #used to keep track of opened song properties dialog and lyrics dialog
 our $PlayTime;
 our ($StartTime,$StartedAt,$PlayingID, @Played_segments);
@@ -1245,9 +1239,8 @@ our %Options=
 	use_GST_for_server=>1,
 	Icecast_port	=> '8000',
 	UseTray		=> 1,
+	TrayMiddleClick	=> 'playpause',
 	CloseToTray	=> 0,
-	ShowTipOnSongChange	=> 0,
-	TrayTipTimeLength	=> 3000, #in ms
 	TAG_use_latin1_if_possible => 1,
 	TAG_no_desync		=> 1,
 	TAG_keep_id3v2_ver	=> 0,
@@ -1323,7 +1316,7 @@ sub keybinding_longname
 	return $name.'-'.$key;
 }
 
-our ($NBVolIcons,$NBQueueIcons); our %TrayIcon;
+our ($NBVolIcons,$NBQueueIcons);
 my $icon_factory;
 
 my %IconsFallbacks=
@@ -1505,12 +1498,6 @@ sub LoadIcons		#FIXME 2TO3 move gtk-fullscreen.png to gnome-classic folder
 		$Songs::Def{$field}{nbpictures}= @stars;
 	}
 
-	#trayicons
-	%TrayIcon=();
-	$TrayIcon{'default'}= get_icon_filename('trayicon');
-	$TrayIcon{$_}= get_icon_filename('trayicon-'.$_) for qw/play pause/;
-	UpdateTrayIcon(1);
-
 	Gtk3::Window::set_default_icon_from_file(get_icon_filename('gmusicbrowser'));
 
 	$_->queue_draw for Gtk3::Window::list_toplevels; #needed ? probably for songtree and songlist, others ? CHECKME 2TO3
@@ -1565,16 +1552,6 @@ sub LoadIcons_DELME	#2TO3
 		warn $@ if $@;
 	}
 	else { Gtk3::Window::set_default_icon_name('gmusicbrowser'); }
-
-	#trayicons
-	{	%TrayIcon=();
-		my $prefix= $TrayIcon{'default'}= $icons{trayicon} || PIXPATH.'trayicon.png';
-		$prefix=~s/\.[^.]+$//;
-		for my $key (qw/play pause/)
-		{	($TrayIcon{$key})= grep -r $_, map "$prefix-$key.$_",qw/png svg/;
-		}
-		UpdateTrayIcon(1);
-	}
 
 	$NBVolIcons=0;
 	$NBVolIcons++ while $icons{'gmb-vol'.$NBVolIcons};
@@ -1708,7 +1685,6 @@ our %Command=		#contains sub,description,argument_tip, argument_regex or code re
 	AddToLibrary	=> [sub { AddPath(1,split / /,$_[1]); }, _"Add files/folders to library", _"url-encoded list of files/folders",0],
 	SetFocusOn	=> [sub { my ($w,$name)=@_;return unless $w; $w=get_layout_widget($w);$w->SetFocusOn($name) if $w;},_"Set focus on a layout widget", _"Widget name",0],
 	ShowHideWidget	=> [sub { my ($w,$name)=@_;return unless $w; $w=get_layout_widget($w);$w->ShowHide(split / +/,$name,2) if $w;},_"Show/Hide layout widget(s)", _"|-separated list of widget names",0],
-	PopupTrayTip	=> [sub {ShowTraytip($_[1])}, _"Popup Traytip",_"Number of milliseconds",qr/^\d*$/ ],
 	SetSongLabel	=> [sub{ Songs::Set($SongID,'+label' => $_[1]); }, _"Add a label to the current song", _"Label",qr/./],
 	UnsetSongLabel	=> [sub{ Songs::Set($SongID,'-label' => $_[1]); }, _"Remove a label from the current song", _"Label",qr/./],
 	ToggleSongLabel	=> [sub{ Songs::Set($SongID,'^label' => $_[1]); }, _"Toggle a label of the current song", _"Label",qr/./],
@@ -1890,10 +1866,9 @@ Update_QueueActionList();
 QueueChanged() if $QueueAction;
 
 CreateMainWindow( $CmdLine{layout}||$Options{Layout} );
-ShowHide(0) if $CmdLine{hide} || ($Options{StartInTray} && $Options{UseTray} && $TrayIconAvailable);
-SkipTo($PlayTime) if $PlayTime; #done only now because of gstreamer
-
 CreateTrayIcon();
+ShowHide(0) if $CmdLine{hide} || ($Options{StartInTray} && $TrayIcon);
+SkipTo($PlayTime) if $PlayTime; #done only now because of gstreamer
 
 if (my $cmds=delete $CmdLine{runcmd}) { run_command(undef,$_) for @$cmds; }
 $SIG{TERM} = \&Quit;
@@ -2071,7 +2046,6 @@ sub Quit
 	$Options{SavedPlayTime}= $PlayTime if $Options{RememberPlayTime};
 	&Stop if defined $TogPlay;
 	@ToScan=@ToAdd_Files=();
-	CloseTrayTip();
 	SaveTags();
 	HasChanged('Quit');
 	unlink $FIFOFile if $FIFOFile;
@@ -2435,7 +2409,6 @@ sub ReadOldSavedTags
 	$Options{Labels}=[ split "\x1D",$Options{Labels} ] unless ref $Options{Labels};	#for version <1.1.2
 	$Options{Fields_options}{label}{persistent_values}= delete $Options{Labels};
 	$Options{Artists_split_re}= [ map { $artistsplit_old_to_new{$_}||$_ } grep $_ ne '$', split /\|/, delete $Options{ArtistSplit} ];
-	$Options{TrayTipDelay}&&=900;
 
 	Post_Options_init();
 
@@ -2621,11 +2594,12 @@ sub ReadSavedTags	#load tags _and_ settings
 		if ($oldversion<=1.1011) {delete $Options{$_} for qw/ScanPlayOnly/;} #cleanup old options
 		$Options{AutoRemoveCurrentSong}= delete $Options{TAG_auto_check_current} if $oldversion<1.1005 && exists $Options{TAG_auto_check_current};
 		$Options{PlayedMinPercent}= 100*delete $Options{PlayedPercent} if exists $Options{PlayedPercent};
+		$Options{UseTray}=1 if delete $Options{PLUGIN_AppIndicator}; #the AppIndicator plugin is now used by the tray icon option
+		$Options{TrayMiddleClick}= delete $Options{PLUGIN_AppIndicator_MiddleClick} if exists $Options{PLUGIN_AppIndicator_MiddleClick};
 		if ($Options{ArtistSplit}) # for versions <= 1.1.5
 		{	$Options{Artists_split_re}= [ map { $artistsplit_old_to_new{$_}||$_ } grep $_ ne '$', split /\|/, delete $Options{ArtistSplit} ];
 		}
 		if ($oldversion<1.1007) { for my $re (@{$Options{Artists_split_re}}) { $re='\s*,\s+' if $re eq '\s*,\s*'; } }
-		if ($oldversion<1.1008) { my $d=$Options{TrayTipDelay}||0; $Options{TrayTipDelay}= $d==1 ? 900 : $d; }
 		if ($Options{Labels}) { $Options{Fields_options}{label}{persistent_values}= delete $Options{Labels} }
 		if ($oldversion<=1.1014) { $Options{$_}= delete $Options{"gst_$_"} for qw/equalizer use_equalizer equalizer_preset equalizer_preamp use_replaygain rg_albummode rg_fallback rg_preamp rg_limiter/; }
 
@@ -3597,7 +3571,6 @@ sub UpdateCurrentSong
 		$prevID=$SongID;
 		QHasChanged('CurSongID',$SongID);
 		QHasChanged('CurSong',$SongID);
-		ShowTraytip($Options{TrayTipTimeLength}) if $TrayIcon && $Options{ShowTipOnSongChange} && !$FullscreenWindow;
 		IdleDo('CheckCurrentSong',1000,\&CheckCurrentSong) if defined $SongID;
 		if (defined $RecentPos && (!defined $SongID || $SongID!=$Recent->[$RecentPos-1])) { $RecentPos=undef }
 		$ChangedPos=1;
@@ -3647,7 +3620,6 @@ sub UpdateCurrentSong
 #	}
 #	if ($ChangedID)
 #	{	HasChanged('CurSong',$SongID);
-#		ShowTraytip($Options{TrayTipTimeLength}) if $TrayIcon && $Options{ShowTipOnSongChange} && !$FullscreenWindow;
 #	}
 #	if ($ChangedPos)
 #	{	HasChanged('Pos','song');
@@ -6943,16 +6915,18 @@ sub PrefLayouts
 {	my $vbox=Gtk3::VBox->new(FALSE, 2);
 
 	#Tray
-	my $traytiplength=NewPrefSpinButton('TrayTipTimeLength', 0,100000, step=>100, text=>_"Display tray tip for %d ms");
 	my $checkT5=NewPrefCheckButton(StartInTray => _"Start in tray");
 	my $checkT2=NewPrefCheckButton(CloseToTray => _"Close to tray");
-	my $checkT3=NewPrefCheckButton(ShowTipOnSongChange => _"Show tray tip on song change", widget=>$traytiplength);
-	my $checkT4=NewPrefSpinButton('TrayTipDelay', 0,10000, step=>100, text=> _"Delay before showing tray tip popup on mouse over : %d ms", cb=>\&SetTrayTipDelay);
+	my @trayclick= !$TrayIcon ? () :
+	(	NewPrefCombo(TrayMiddleClick => #keys must correspond to an id in @TrayMenu
+			{ playpause=> _"Play/Pause", showhide=> _"Show/Hide", next=> _"Next" },
+			text => _"Middle-click action :", cb=>\&GMB::AppIndicator::Update),
+		Gtk3::Label->new_with_format("<i>%s</i>",_"(The middle-click action doesn't work correctly in some desktops)"),
+	);
 	my $checkT1=NewPrefCheckButton( UseTray => _"Show tray icon",
 					cb=> sub { &CreateTrayIcon; },
-					widget=> Vpack($checkT5,$checkT4,$checkT3)
+					widget=> Vpack($checkT5,@trayclick)
 					);
-	$checkT1->set_sensitive($TrayIconAvailable);
 
 	#layouts
 	my $sg1=Gtk3::SizeGroup->new('horizontal');
@@ -6960,7 +6934,6 @@ sub PrefLayouts
 	my @layouts_combos;
 	for my $layout	( [ 'Layout', 'G',_"Player window layout :", sub {CreateMainWindow();}, ],
 			  [ 'LayoutB','B',_"Browser window layout :", ],
-			  [ 'LayoutT','T',_"Tray tip window layout :", ],
 			  [ 'LayoutF','F',_"Full screen layout :", ],
 			  [ 'LayoutS','S',_"Search window layout :", ],
 			)
@@ -8023,59 +7996,21 @@ sub PopupLayout
 	my $popup=Layout::Window::Popup->new($layout,$widget);
 }
 
-sub UpdateTrayIcon
-{	my $force=shift;
-	return unless $TrayIcon;
-	return unless $force || $TrayIcon{play} || $TrayIcon{pause};
-	my $state= !defined $TogPlay ? 'default' : $TogPlay ? 'play' : 'pause';
-	$state='default' unless $TrayIcon{$state};
-	my $pb= $TrayIcon{'PixBuf_'.$state} ||= eval {Gtk3::Gdk::Pixbuf->new_from_file($TrayIcon{$state})};
-	$TrayIcon->set_from_pixbuf($pb);
-}
-
 sub CreateTrayIcon
 {	if ($TrayIcon)
 	{	return if $Options{UseTray};
+		GMB::AppIndicator::Stop();
 		$TrayIcon=undef;
 		return;
 	}
-	elsif (!$Options{UseTray} || !$TrayIconAvailable)	 {return}
+	elsif (!$Options{UseTray})	 {return}
 
-	$TrayIcon= Gtk3::StatusIcon->new;
-	SetTrayTipDelay();
-	Layout::Window::Popup::set_hover($TrayIcon);
-
-	$TrayIcon->signal_connect(scroll_event => \&::ChangeVol);
-	$TrayIcon->signal_connect(button_press_event => sub
-		{	my $b=$_[1]->button;
-			if	($b==3) { &TrayMenuPopup }
-			elsif	($b==2) { &PlayPause}
-			else		{ ShowHide() }
-			1;
-		});
-
-	UpdateTrayIcon(1);
-	Watch($TrayIcon, Playing=> sub { UpdateTrayIcon(); });
-}
-sub SetTrayTipDelay
-{	return unless $TrayIcon;
-	$TrayIcon->{hover_delay}= $Options{TrayTipDelay}||1;
-}
-sub TrayMenuPopup
-{	CloseTrayTip();
-	$TrayIcon->{block_popup}=1;
-	my $menu=Gtk3::Menu->new;
-	$menu->signal_connect( selection_done => sub {$TrayIcon->{block_popup}=undef});
-	PopupContextMenu(\@TrayMenu, {usemenupos=>1}, $menu);
-}
-sub CloseTrayTip
-{	return unless $TrayIcon;
-	my $traytip=$TrayIcon->{PoppedUpWindow};
-	$traytip->DestroyNow if $traytip;
-}
-sub ShowTraytip
-{	return 0 if !$TrayIcon || $TrayIcon->{block_popup};
-	Layout::Window::Popup::Popup($TrayIcon,$_[0]);
+	if (eval { require 'gmusicbrowser_appindicator.pm' } && GMB::AppIndicator::WatcherPresent())
+	{	GMB::AppIndicator::Start();
+		$TrayIcon=1;
+		return;
+	}
+	warn "No tray icon : ".($@ || "no StatusNotifierWatcher on D-Bus\n");
 }
 sub windowpos	# function to position window next to clicked widget ($event can be a widget)
 {	my ($win,$event)=@_;
@@ -8083,23 +8018,15 @@ sub windowpos	# function to position window next to clicked widget ($event can b
 	my $h=$win->size_request->height;		# height of window to position
 	my $w=$win->size_request->width;		# width of window to position
 	my $display=$event->get_screen->get_display;
-	my ($monitor,$x,$y,$dx,$dy);
-	if ($event->isa('Gtk3::StatusIcon'))
-	{	my $geometry= ($event->get_geometry)[2];
-		($x,$y,$dx,$dy)= @$geometry{qw/x y width height/}; # position and size of statusicon
-		$monitor= $display->get_monitor_at_point($x,$y);
-	}
-	else
-	{	my $window= $event->get_window;
-		$monitor= $display->get_monitor_at_window($window);
-		($x,$y)= $window->get_origin;		# position of the clicked widget on the screen
-		$dx= $window->get_width;		# its width
-		$dy= $window->get_height;		# its height
-		if ($event->isa('Gtk3::Widget') && !$event->get_has_window)
-		{	my $alloc= $event->get_allocation;
-			(my$x2,my$y2,$dx,$dy)= @$alloc{qw/x y width height/};
-			$x+=$x2; $y+=$y2;
-		}
+	my $window= $event->get_window;
+	my $monitor= $display->get_monitor_at_window($window);
+	my ($x,$y)= $window->get_origin;	# position of the clicked widget on the screen
+	my $dx= $window->get_width;		# its width
+	my $dy= $window->get_height;		# its height
+	if ($event->isa('Gtk3::Widget') && !$event->get_has_window)
+	{	my $alloc= $event->get_allocation;
+		(my$x2,my$y2,$dx,$dy)= @$alloc{qw/x y width height/};
+		$x+=$x2; $y+=$y2;
 	}
 	my $geometry= $monitor->get_geometry;
 	my ($xmin,$ymin,$monitorwidth,$monitorheight)= @$geometry{qw/x y width height/};
