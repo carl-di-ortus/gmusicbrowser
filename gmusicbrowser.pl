@@ -1159,7 +1159,7 @@ our ($RandomMode,$SortFields,$ListMode);
 our ($SongID,$prevID,$Recent,$RecentPos,$Queue); our $QueueAction=our $NextAction='';
 our ($Position,$ChangedID,$ChangedPos,@NextSongs,$NextFileToPlay);
 our ($MainWindow,$FullscreenWindow); my $OptionsDialog;
-my $TrayIcon;
+our $TrayIcon;
 my %Editing; #used to keep track of opened song properties dialog and lyrics dialog
 our $PlayTime;
 our ($StartTime,$StartedAt,$PlayingID, @Played_segments);
