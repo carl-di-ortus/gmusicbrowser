@@ -1316,7 +1316,7 @@ sub keybinding_longname
 	return $name.'-'.$key;
 }
 
-our ($NBVolIcons,$NBQueueIcons); our %TrayIcon;
+our ($NBVolIcons,$NBQueueIcons);
 my $icon_factory;
 
 my %IconsFallbacks=
@@ -1498,11 +1498,6 @@ sub LoadIcons		#FIXME 2TO3 move gtk-fullscreen.png to gnome-classic folder
 		$Songs::Def{$field}{nbpictures}= @stars;
 	}
 
-	#trayicons
-	%TrayIcon=();
-	$TrayIcon{'default'}= get_icon_filename('trayicon');
-	$TrayIcon{$_}= get_icon_filename('trayicon-'.$_) for qw/play pause/;
-
 	Gtk3::Window::set_default_icon_from_file(get_icon_filename('gmusicbrowser'));
 
 	$_->queue_draw for Gtk3::Window::list_toplevels; #needed ? probably for songtree and songlist, others ? CHECKME 2TO3
@@ -1557,15 +1552,6 @@ sub LoadIcons_DELME	#2TO3
 		warn $@ if $@;
 	}
 	else { Gtk3::Window::set_default_icon_name('gmusicbrowser'); }
-
-	#trayicons
-	{	%TrayIcon=();
-		my $prefix= $TrayIcon{'default'}= $icons{trayicon} || PIXPATH.'trayicon.png';
-		$prefix=~s/\.[^.]+$//;
-		for my $key (qw/play pause/)
-		{	($TrayIcon{$key})= grep -r $_, map "$prefix-$key.$_",qw/png svg/;
-		}
-	}
 
 	$NBVolIcons=0;
 	$NBVolIcons++ while $icons{'gmb-vol'.$NBVolIcons};

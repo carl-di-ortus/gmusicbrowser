@@ -14,7 +14,7 @@ package GMB::AppIndicator;
 use strict;
 use warnings;
 
-my ($indicator,$iconpath,$menu,$dbusmenu);
+my ($indicator,$menu,$dbusmenu);
 
 Glib::Object::Introspection->setup(basename=>'Gio', version=>'2.0', package=>'GMB::AppIndicator::Gio');
 
@@ -44,7 +44,6 @@ sub Start
 	}
 	# events that requires updating the traymenu :
 	::Watch($indicator, $_=> \&QueueUpdate) for qw/Lock Playing Windows/;
-	#::Watch($indicator, $_=> \&UpdateIcon) for qw/Playing Icons/; #FIXME needs initialization #deactivated because it can't work for now
 	::Watch($indicator, CurSong=> \&UpdateTooltip);
 	UpdateTooltip();
 	QueueUpdate();
@@ -155,18 +154,5 @@ sub ExportDbusmenu
 			$dbusmenu->set_root( GMB::AppIndicator::DbusmenuGtk3::gtk_parse_menu_structure($menu) ) if $menu;
 		});
 }
-
-####
-
-#doesn't work, needs gmb to switch the standard icon system first #2TO3 could it work now ?
-sub UpdateIcon
-{	my $state= !defined $::TogPlay ? 'default' : $::TogPlay ? 'play' : 'pause';
-	$state='default' unless $::TrayIcon{$state};
-	my $path= ::dirname($::TrayIcon{$state});
-	my $name= ::barename($::TrayIcon{$state});
-	$indicator->set_icon_theme_path($iconpath=$path) if $iconpath && $iconpath ne $path;
-	$indicator->set_icon_name_active($name);
-}
-
 
 1;
