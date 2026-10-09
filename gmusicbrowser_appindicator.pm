@@ -96,7 +96,8 @@ sub Update
 		$old->destroy if $old;
 	}
 	else
-	{	$indicator->set_menu($menu);
+	{	$indicator->set_secondary_activate_target(undef);	#the target must not be in the menu being replaced
+		$indicator->set_menu($menu);
 		my $entry= MiddleClickEntry();
 		$indicator->set_secondary_activate_target($entry) if $entry;
 	}
