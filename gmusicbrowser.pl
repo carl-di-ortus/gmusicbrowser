@@ -3585,51 +3585,12 @@ sub UpdateCurrentSong
 		}
 		QHasChanged('Pos','song');
 	}
-	#   Stop(); if  !defined $SongID ???????
-	#if	($forceplay)			{Play()}
 	if	($ChangedID)
 	{	if	($TogPlay)		{Play()}
 		elsif	(defined $TogPlay)	{Stop()}
 	}
 	$ChangedID=$ChangedPos=0;
 }
-
-#sub UpdateSongID			#CHECKME use -1 instead of undef for Position ???
-#{	my ($type,$ID,$force)=@_;
-#::callstack(@_);
-#	if ($type eq 'position')
-#	{	if ($ID!=$Position || $force) { $ChangedPos=1; $Position=$ID; }
-#		$ID=$ListPlay->[$ID];
-#	}
-#	if (!defined $ID)
-#	{	$ChangedID=$ChangedPos=1;
-#		$Position=$SongID=undef;
-#		Stop();
-#	}
-#	elsif (!defined $SongID || $ID!=$SongID)
-#	{	$ChangedID=1; $SongID=$ID;
-#		IdleCheck($SongID) if $Options{TAG_auto_check_current};
-#		if (defined $RecentPos && (!defined $SongID || $SongID!=$Recent->[$RecentPos-1])) { $RecentPos=undef }
-#	}
-#	if ($RandomMode) { $Position=undef; $ChangedPos=1; }
-#	elsif ($type ne 'position' && (!defined $Position || $ListPlay->[$Position]!=$SongID))
-#	{	my $start=$Position;
-#		$Position=undef;
-#		for my $i ($start+1..$#$ListPlay, 0..$start-1) {$Position=$i if $ListPlay->[$i]==$SongID}
-#		$ChangedPos=1;
-#	}
-#	if ($ChangedID)
-#	{	HasChanged('CurSong',$SongID);
-#	}
-#	if ($ChangedPos)
-#	{	HasChanged('Pos','song');
-#	}
-#	if ( $force || $ChangedID )
-#	{	if	($TogPlay)		{Play()}
-#		elsif	(defined $TogPlay)	{Stop()}
-#	}
-#	$ChangedID=$ChangedPos=0;
-#}
 
 sub IDIsInList
 {	my ($list,$ID)=@_;

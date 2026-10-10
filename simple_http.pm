@@ -28,6 +28,7 @@ sub post_with_cb
 	
 	my %headers = ('Content-Type' => 'application/json');
 	$headers{'Authorization'} = "Token $authtoken" if $authtoken;
+	$headers{'User-Agent'} = 'Mozilla/5.0 (compatible; Linux x86_64; gmusicbrowser/1.1.99)';
 	
 	open my $fh, '<', $post or die "failed to open: $!";
 	my $content = do { local $/; <$fh> };
@@ -49,7 +50,10 @@ sub get_with_cb
 	$ua->request_timeout(5);
 	$ua->max_redirects(3);
 
-	my $tx = $ua->get($url);
+	my %headers = ('Content-Type' => 'application/json');
+	$headers{'User-Agent'} = 'Mozilla/5.0 (compatible; Linux x86_64; gmusicbrowser/1.1.99)';
+
+	my $tx = $ua->get($url => \%headers);
 	process_response($callback, $url, $tx);
 }
 

@@ -1,3 +1,11 @@
+gmusicbrowser (1.1.99.7) forky; urgency=low
+
+  * Deprecate old tray icon window, replaced by Ayatana AppIndicator plugin.
+    The old layout is still available for use by calling a popup window.
+  * Mojo: Simulate browser UserAgent
+
+ -- Carl di Ortus <reklamukibiras@gmail.com>  Fri, 08 Oct 2026 21:56:00 +0300
+ 
 gmusicbrowser (1.1.99.6) forky; urgency=low
 
   * Saved libraries now store filenames and cover paths as readable UTF-8, with
