@@ -4,7 +4,7 @@ Layout documentation
 ## Introduction
 
 Gmusicbrowser's interface is defined by layouts. Each layout define a window that contain several containers, each containing widgets.  
-Layouts are used in many places in gmusicbrowser : the main window, the "traytip" popup, the fullscreen mode, the search and browser windows, pages that can be inserted as a tab, desktop widgets (plugin), the titlebar overlays (plugin), as well as some internal windows (such as the queue, equalizer).
+Layouts are used in many places in gmusicbrowser : the main window, popup windows (`hover_layout` option, PopupCustom command), the fullscreen mode, the search and browser windows, pages that can be inserted as a tab, desktop widgets (plugin), the titlebar overlays (plugin), as well as some internal windows (such as the queue, equalizer).
 
 Note that this documentation is likely incomplete, and could be improved. Don't hesitate to suggest improvements, ask for clarification, or point out missing informations.
 
@@ -220,7 +220,7 @@ All containers accept the option `border` to specify the amount of padding aroun
 
   - G Generic or player window
   - B Browser window
-  - T Tray window
+  - T Popup window
   - F Fullscreen
   - S Search
   - P Page for use in TabbedLists/NB/Context
@@ -494,7 +494,7 @@ indicators (Filter Queue Sort ...) and some buttons (Play Next Prev Stop Quit ..
   By default, all these widgets show information on the currently playing song, some allow the edition of a property of the current song. By using the `group` option (see above), these widgets should be able to follow for example the selected song in a songlist rather than the current song. Example : `VBexample= _SongList(group=example) Cover(group=example)`
 
  - Cover : Album cover of currently playing song
-    - forceratio : 1 or 0, if 1 always request a square size, useful for tray tip windows as they can't be resized
+    - forceratio : 1 or 0, if 1 always request a square size, useful for popup windows as they can't be resized
     - minsize : minimum size
     - maxsize : maximum size (default is 500)
     - default : set a default file to use if there is no cover/artist picture
