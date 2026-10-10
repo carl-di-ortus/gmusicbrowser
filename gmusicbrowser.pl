@@ -549,11 +549,8 @@ BEGIN
 	$Image_ext_re=qr/\.(?:$re)$/i;
 }
 our $EmbImage_ext_re= join '|', sort grep $FileTag::FORMATS{$_}{image}, keys %FileTag::FORMATS;
-$EmbImage_ext_re= qr/\.(?:$EmbImage_ext_re)/i; # warning: doesn't force end of string (with a "$") as sometimes needs to include/extract a :\w+ at the end, so need to use it with /$EmbImage_ext_re$/ or /$EmbImage_ext_re(:\w+)?$/
-
+$EmbImage_ext_re= qr/\.(?:$EmbImage_ext_re)/i; # warning: doesn't force end of string (with a "$") as sometimes needs to include/extract a :\w+ at the end, so need to use it with
 ##########
-
-#our $re_spaces_unlessinbrackets=qr/([^( ]+(?:\(.*?\))?)(?: +|$)/; #breaks "widget1(options with spaces) widget2" in "widget1(options with spaces)" and "widget2" #replaced by ExtractNameAndOptions
 
 my ($browsercmd,$opendircmd);
 
