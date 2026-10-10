@@ -66,7 +66,7 @@ my %Sites=	# id => [name,url,?,function]	if the function return 1 => lyrics can 
 	# http://letras.terra.com.br/winamp.php?musica=%t&artista=%a
 	# http://lyrics.wikia.com/%a:%t
 	musixmatch => [
-		musixmatch => sub {  ::ReplaceFields($_[0], "https://www.musixmatch.com/lyrics/%a/%t", sub { my $s=::url_escapeall($_[0]); $s=~s/%20/-/g; $s }) },
+		musixmatch => sub {  ::ReplaceFields($_[0], "https://www.musixmatch.com/lyrics/%a/%t", sub { my $s=::url_escapeall($_[0]); $s=~s/%[[:xdigit:]]{2}/-/g; $s }) },
 		sub
 			{
 				if (!$_[0] || $_[0] eq "404 Not Found") {
