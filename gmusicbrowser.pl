@@ -1846,8 +1846,8 @@ LoadIcons();
 	SwitchPlayPackage();
 }
 
-IdleCheck() if $Options{StartCheck} && !$CmdLine{nocheck};
 IdleScan()  if $Options{StartScan}  && !$CmdLine{noscan};
+IdleDo('9_StartCheck',undef,\&IdleCheck) if $Options{StartCheck} && !$CmdLine{nocheck};	#queued as a task so it runs after the scan: moved songs get found before being marked missing
 $Options{Icecast_port}=$CmdLine{port} if $CmdLine{port};
 
 #$ListMode=[] if $CmdLine{empty};
